@@ -20,6 +20,7 @@ import { styled } from "@stitches/react";
 import { Card } from "../../components/atoms/Card";
 import { blackA } from "@radix-ui/colors";
 import { CHUNK_SIZE } from "../../utils/generate";
+import { useDebounce } from "../../hooks/useDebounce";
 
 const Center = styled("div", {
   width: "100%",
@@ -69,8 +70,8 @@ const Title = styled("h1", {
   fontSize: "large",
 });
 
-const WIDTH = 500;
-const HEIGHT = 500;
+const WIDTH = 800;
+const HEIGHT = 800;
 
 // const MAX_ZOOM = 5;
 // const MIN_ZOOM = 1;
@@ -82,7 +83,8 @@ const NativeMap = () => {
   const canvasTerrainRef = useRef<HTMLCanvasElement>(null);
 
   const [bg, setBg] = useState("");
-  const [chunks, setChunks] = useState([generateMapGround()]);
+
+  const [chunks, setChunks] = useState<Tile[][][]>([]);
 
   const [context, setContext] = useState<CanvasRenderingContext2D | null>(null);
   // const [zoom, setZoom] = useState(MIN_ZOOM);
@@ -93,19 +95,16 @@ const NativeMap = () => {
   });
   const [offset, setOffset] = useState({ x: 0, y: 0 });
 
-  const generateChunk = useCallback(
-    (chunkPosition?: ChunkPosition) => {
-      const offset = chunkPosition
-        ? {
-            x: chunkPosition.x * CHUNK_SIZE,
-            y: chunkPosition.y * CHUNK_SIZE,
-          }
-        : undefined;
+  const generateChunk = useCallback((chunkPosition?: ChunkPosition) => {
+    const offset = chunkPosition
+      ? {
+          x: chunkPosition.x * CHUNK_SIZE,
+          y: chunkPosition.y * CHUNK_SIZE,
+        }
+      : undefined;
 
-      return setChunks([...chunks, generateMapGround(offset)]);
-    },
-    [chunks]
-  );
+    return generateMapGround(offset);
+  }, []);
 
   useEffect(() => {
     const visibleChunks = calculateVisibleChunks({
@@ -130,38 +129,12 @@ const NativeMap = () => {
       return;
     }
 
-    for (const missingChunk of missingChunks) {
-      generateChunk(missingChunk);
+    const newChunks = [];
+    for (const missingChunk of visibleChunks) {
+      newChunks.push(generateChunk(missingChunk));
     }
+    setChunks([...newChunks]);
   }, [chunks, generateChunk, offset.x, offset.y]);
-
-  // const handleWheel = (event: WheelEvent<HTMLCanvasElement>) => {
-  //   event.preventDefault();
-  //   const { deltaY } = event;
-
-  //   setZoom((prevScale) => {
-  //     const scaleFactor = Math.max(
-  //       Math.min(prevScale + deltaY * SCROLL_SENSITIVITY, MAX_ZOOM),
-  //       MIN_ZOOM
-  //     );
-
-  //     if (scaleFactor === prevScale) {
-  //       return prevScale;
-  //     }
-
-  //     // setOffset({
-  //     //   x:
-  //     //     offset.x +
-  //     //     Math.round((offset.x + coordinatesMouse.x) * (scaleFactor / 5 - 1)) +
-  //     //     OFFSET,
-  //     //   y:
-  //     //     offset.y +
-  //     //     Math.round((offset.y + coordinatesMouse.y) * (scaleFactor / 5 - 1)) +
-  //     //     OFFSET,
-  //     // });
-  //     return scaleFactor;
-  //   });
-  // };
 
   const handleMouseMove = (event: MouseEvent<HTMLCanvasElement>) => {
     event.preventDefault();
@@ -176,20 +149,20 @@ const NativeMap = () => {
     if (event.buttons === 1) {
       setOffset((prevTranslate) => {
         const newX = Math.round(
-          (prevTranslate.x + Math.round(movementX * SPEED)) / 10
+          prevTranslate.x + Math.round(movementX * SPEED)
         );
         const newY = Math.round(
-          (prevTranslate.y + Math.round(movementY * SPEED)) / 10
+          prevTranslate.y + Math.round(movementY * SPEED)
         );
 
         setCoordinatesMouse({
-          x: Math.floor((clientX - rect?.left) / TILE_SIZE / 100) - newX,
-          y: Math.floor((clientY - rect?.top) / TILE_SIZE / 100) - newY,
+          x: Math.floor((clientX - rect?.left) / TILE_SIZE) - newX,
+          y: Math.floor((clientY - rect?.top) / TILE_SIZE) - newY,
         });
 
         return {
-          x: prevTranslate.x + Math.round(movementX * SPEED),
-          y: prevTranslate.y + Math.round(movementY * SPEED),
+          x: newX,
+          y: newY,
         };
       });
     } else {
@@ -226,6 +199,7 @@ const NativeMap = () => {
     if (!context) {
       return;
     }
+    const startTime = performance.now();
 
     context.save();
     context.clearRect(0, 0, WIDTH, HEIGHT);
@@ -239,13 +213,27 @@ const NativeMap = () => {
       context.beginPath();
       context.fillStyle = getColor(biome, values[0]);
       context.fillRect(posX, posY, w, h);
-
-      context.stroke();
     };
 
-    for (const chunk of chunks) {
-      for (const tile of chunk.flat()) {
-        drawRect(tile);
+    const drawChunk = (chunk: Tile[][]) => {
+      const position = chunk[0][0];
+
+      context.beginPath();
+      context.strokeStyle = "red";
+      context.strokeRect(
+        position.x * TILE_SIZE,
+        position.y * TILE_SIZE,
+        TILE_SIZE * CHUNK_SIZE,
+        TILE_SIZE * CHUNK_SIZE
+      );
+    };
+
+    if (chunks && chunks?.length > 0) {
+      for (const chunk of chunks) {
+        drawChunk(chunk);
+        for (const tile of chunk.flat()) {
+          drawRect(tile);
+        }
       }
     }
 
@@ -254,18 +242,26 @@ const NativeMap = () => {
       (canvasTerrainRef && canvasTerrainRef.current?.toDataURL("image/png")) ||
         ""
     );
+    const endTime = performance.now();
+    console.log(`${endTime - startTime}ms`);
   }, [chunks, context, offset]);
 
-  const currentBiome = useMemo(() => {
-    return (
-      chunks
-        .flat()
-        .flat()
-        .find((tile) => {
-          return tile.x === coordinatesMouse.x && tile.y === coordinatesMouse.y;
-        })?.biome || null
-    );
-  }, [chunks, coordinatesMouse.x, coordinatesMouse.y]);
+  const chunksDebounced = useDebounce(chunks, 200);
+  const coordinatesMouseDebounced = useDebounce(coordinatesMouse, 200);
+
+  const currentTile = useMemo(() => {
+    const tile = chunksDebounced
+      .flat()
+      .flat()
+      .find((tile) => {
+        return (
+          tile.x === coordinatesMouseDebounced.x &&
+          tile.y === coordinatesMouseDebounced.y
+        );
+      });
+
+    return tile;
+  }, [chunksDebounced, coordinatesMouseDebounced]);
 
   return (
     <Wrapper>
@@ -291,7 +287,7 @@ const NativeMap = () => {
             justifySelf: "end",
           }}
         >
-          <span>Biome: {currentBiome}</span>
+          <span>Biome: {currentTile?.biome}</span>
         </Card>
       </Header>
 

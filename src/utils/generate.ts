@@ -39,7 +39,7 @@ export const BiomePreset: {
 } = {
   desert: {
     minHeight: 0.2,
-    minMoisture: -0.8,
+    minMoisture: -0.5,
     minHeat: 0.6,
   },
   forest: {
@@ -171,17 +171,28 @@ export function getBiome(
     return "ocean";
   }
 
-  const biome = Object.entries(BiomePreset).find((preset) => {
-    const condition = preset[1];
+  let biome: Biome = "ocean";
 
-    return (
-      height >= condition.minHeight &&
-      moisture >= condition.minMoisture &&
-      heat >= condition.minHeat
-    );
-  });
+  for (const _biomeKey in BiomePreset) {
+    const _biome = BiomePreset[_biomeKey as Biome];
 
-  return (biome ? biome[0] : "ocean") as Biome;
+    if (_biomeKey === "ocean") {
+      continue;
+    }
+
+    if (
+      (height >= _biome.minHeight ||
+        BiomePreset[biome].minHeight <= _biome.minHeight) &&
+      (moisture >= _biome.minMoisture ||
+        BiomePreset[biome].minMoisture <= _biome.minMoisture) &&
+      (heat >= _biome.minHeat || BiomePreset[biome].minHeat <= _biome.minHeat)
+    ) {
+      biome = _biomeKey as Biome;
+      break;
+    }
+  }
+
+  return (biome ? biome : "ocean") as Biome;
 }
 
 export const getColor = (biome: Biome, value: number) => {
@@ -216,34 +227,21 @@ export function fBm(
   return total;
 }
 
-export const generateMapGround = (offset: Offset = { x: 0, y: 0 }) => {
-  return Array.from({ length: CHUNK_SIZE }).map((_, x) => {
-    return Array.from({ length: CHUNK_SIZE }).map((_, y) => {
+export const generateMapGround = (
+  offset: Offset = { x: 0, y: 0 }
+): Tile[][] => {
+  const chunk = [];
+  for (let x = 0; x < CHUNK_SIZE; x++) {
+    const row = [];
+    for (let y = 0; y < CHUNK_SIZE; y++) {
       const _x = x - offset.x;
       const _y = y - offset.y;
       const height = fBm(noise2DHeight, _x, _y, 8, 0.5);
-      const moisture = fBm(
-        noise2DMoisture,
-        _x - offset.x,
-        _y - offset.y,
-        4,
-        0.5,
-        0.01,
-        0.5
-      );
-      const heat = fBm(
-        noise2DHeat,
-        _x - offset.x,
-        _y - offset.y,
-        8,
-        0.5,
-        0.01,
-        0.6
-      );
+      const moisture = fBm(noise2DMoisture, _x, _y, 4, 0.5, 0.01, 0.5);
+      const heat = fBm(noise2DHeat, _x, _y, 8, 0.5, 0.01, 0.6);
 
       const biome = getBiome(height, moisture, heat);
-
-      return {
+      row.push({
         x: _x,
         y: _y,
         posX: _x * TILE_SIZE,
@@ -252,9 +250,12 @@ export const generateMapGround = (offset: Offset = { x: 0, y: 0 }) => {
         h: TILE_SIZE,
         values: [height, moisture, heat],
         biome: biome,
-      };
-    });
-  });
+      });
+    }
+    chunk.push(row);
+  }
+
+  return chunk;
 };
 
 // export const generateMapLife = (
