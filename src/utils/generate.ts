@@ -260,9 +260,9 @@ export function fBm(
 export const generateMapGround = (
   offset: Offset = { x: 0, y: 0 }
 ): Tile[][] => {
-  const chunk = [];
+  const chunk: Tile[][] = [];
   for (let x = 0; x < CHUNK_SIZE; x++) {
-    const row = [];
+    const row: Tile[] = [];
     for (let y = 0; y < CHUNK_SIZE; y++) {
       const _x = x - offset.x;
       const _y = y - offset.y;

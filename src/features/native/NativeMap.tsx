@@ -11,42 +11,47 @@ import {
   ChunkPosition,
   TILE_SIZE,
   Tile,
-  calculateMissingChunks,
   calculateVisibleChunks,
   generateMapGround,
   getColor,
 } from "../../utils/generate";
-import { Card } from "../../components/atoms/Card";
 import { CHUNK_SIZE } from "../../utils/generate";
 import { useDebounce } from "../../hooks/useDebounce";
 
 const SPEED = 0.1;
 const VIEWPORT_PADDING = 2;
 const CHUNK_CACHE_SIZE = 100;
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 4;
+const ZOOM_SPEED = 0.1;
 
 type ChunkCache = Map<string, Tile[][]>;
 
-const isChunkVisible = (chunk: Tile[][], offset: {x: number, y: number}, width: number, height: number) => {
+const isChunkVisible = (chunk: Tile[][], offset: {x: number, y: number}, width: number, height: number, zoom: number) => {
   const chunkX = chunk[0][0].x * TILE_SIZE;
   const chunkY = chunk[0][0].y * TILE_SIZE;
   const chunkSize = CHUNK_SIZE * TILE_SIZE;
   
+  const scaledWidth = width / zoom;
+  const scaledHeight = height / zoom;
+  const scaledOffsetX = offset.x * TILE_SIZE;
+  const scaledOffsetY = offset.y * TILE_SIZE;
+  
   return (
-    chunkX + chunkSize + (offset.x * TILE_SIZE) >= 0 &&
-    chunkX + (offset.x * TILE_SIZE) <= width &&
-    chunkY + chunkSize + (offset.y * TILE_SIZE) >= 0 &&
-    chunkY + (offset.y * TILE_SIZE) <= height
+    chunkX + chunkSize + scaledOffsetX >= -VIEWPORT_PADDING * CHUNK_SIZE * TILE_SIZE &&
+    chunkX + scaledOffsetX <= scaledWidth + VIEWPORT_PADDING * CHUNK_SIZE * TILE_SIZE &&
+    chunkY + chunkSize + scaledOffsetY >= -VIEWPORT_PADDING * CHUNK_SIZE * TILE_SIZE &&
+    chunkY + scaledOffsetY <= scaledHeight + VIEWPORT_PADDING * CHUNK_SIZE * TILE_SIZE
   );
 };
 
 const NativeMap = () => {
   const canvasTerrainRef = useRef<HTMLCanvasElement>(null);
-  const requestedChunksRef = useRef<Set<string>>(new Set());
 
   const [chunks, setChunks] = useState<Map<string, Tile[][]>>(new Map());
 
   const [context, setContext] = useState<CanvasRenderingContext2D | null>(null);
-  // const [zoom, setZoom] = useState(MIN_ZOOM);
+  const [zoom, setZoom] = useState(1);
   const [isMoving, setIsMoving] = useState(false);
   const [coordinatesMouse, setCoordinatesMouse] = useState({
     x: 0,
@@ -82,13 +87,13 @@ const NativeMap = () => {
 
     if (event.buttons === 1) {
       setOffset(prevTranslate => {
-        const newX = Math.round(prevTranslate.x + Math.round(movementX * SPEED));
-        const newY = Math.round(prevTranslate.y + Math.round(movementY * SPEED));
+        const newX = Math.round(prevTranslate.x + Math.round((movementX * SPEED) / zoom));
+        const newY = Math.round(prevTranslate.y + Math.round((movementY * SPEED) / zoom));
 
         requestAnimationFrame(() => {
           setCoordinatesMouse({
-            x: Math.floor((clientX - rect.left) / TILE_SIZE) - newX,
-            y: Math.floor((clientY - rect.top) / TILE_SIZE) - newY,
+            x: Math.floor((clientX - rect.left) / (TILE_SIZE * zoom)) - newX,
+            y: Math.floor((clientY - rect.top) / (TILE_SIZE * zoom)) - newY,
           });
         });
 
@@ -97,12 +102,36 @@ const NativeMap = () => {
     } else if (!isMoving) {
       requestAnimationFrame(() => {
         setCoordinatesMouse({
-          x: Math.floor((clientX - rect.left) / TILE_SIZE) - offset.x,
-          y: Math.floor((clientY - rect.top) / TILE_SIZE) - offset.y,
+          x: Math.floor((clientX - rect.left) / (TILE_SIZE * zoom)) - offset.x,
+          y: Math.floor((clientY - rect.top) / (TILE_SIZE * zoom)) - offset.y,
         });
       });
     }
-  }, [isMoving, offset.x, offset.y, lastRenderTime]);
+  }, [isMoving, offset.x, offset.y, lastRenderTime, zoom]);
+
+  const handleWheel = useCallback((event: React.WheelEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+    
+    setZoom(prevZoom => {
+      const delta = event.deltaY < 0 ? ZOOM_SPEED : -ZOOM_SPEED;
+      const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prevZoom + delta));
+      
+      if (newZoom !== prevZoom) {
+        const rect = canvasTerrainRef.current?.getBoundingClientRect();
+        if (rect) {
+          const mouseX = event.clientX - rect.left;
+          const mouseY = event.clientY - rect.top;
+          
+          setOffset(prev => ({
+            x: prev.x - (mouseX / (TILE_SIZE * prevZoom) - mouseX / (TILE_SIZE * newZoom)),
+            y: prev.y - (mouseY / (TILE_SIZE * prevZoom) - mouseY / (TILE_SIZE * newZoom))
+          }));
+        }
+      }
+      
+      return newZoom;
+    });
+  }, []);
 
   useEffect(() => {
     const canvas = canvasTerrainRef.current;
@@ -131,10 +160,12 @@ const NativeMap = () => {
     
     context.save();
     context.clearRect(0, 0, window.innerWidth, window.innerHeight);
+    
+    context.scale(zoom, zoom);
     context.translate(offset.x * TILE_SIZE, offset.y * TILE_SIZE);
     
     const visibleChunks = Array.from(chunks.values()).filter(chunk => 
-      isChunkVisible(chunk, offset, window.innerWidth, window.innerHeight)
+      isChunkVisible(chunk, offset, window.innerWidth, window.innerHeight, zoom)
     );
 
     visibleChunks.forEach(chunk => {
@@ -165,17 +196,17 @@ const NativeMap = () => {
 
     context.restore();
 
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.log(`Render time: ${performance.now() - startTime}ms`);
     }
-  }, [chunks, context, offset]);
+  }, [chunks, context, offset, zoom]);
 
   const getChunkKey = (x: number, y: number) => `${x},${y}`;
 
   useEffect(() => {
     const visibleChunks = calculateVisibleChunks({
-      height: window.innerHeight + (VIEWPORT_PADDING * CHUNK_SIZE * TILE_SIZE),
-      width: window.innerWidth + (VIEWPORT_PADDING * CHUNK_SIZE * TILE_SIZE),
+      height: window.innerHeight / zoom,
+      width: window.innerWidth / zoom,
       x: offset.x,
       y: offset.y,
     });
@@ -208,7 +239,7 @@ const NativeMap = () => {
     }
 
     setChunks(newChunks);
-  }, [offset.x, offset.y, generateChunk]);
+  }, [offset.x, offset.y, generateChunk, zoom]);
 
   const handleMouseDown = useCallback(() => setIsMoving(true), []);
   const handleMouseUp = useCallback(() => setIsMoving(false), []);
@@ -255,6 +286,7 @@ const NativeMap = () => {
           onMouseMove={handleMouseMove}
           onMouseDown={handleMouseDown}
           onMouseUp={handleMouseUp}
+          onWheel={handleWheel}
           style={{ cursor: isMoving ? "grabbing" : "grab" }}
           className="z-20 [image-rendering:crisp-edges] my-auto rounded-lg shadow-[0_2px_10px_-3px_rgba(0,0,0,0.2)]"
         />

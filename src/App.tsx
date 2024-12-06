@@ -1,12 +1,22 @@
 import * as React from 'react';
-import NativeMap from "./features/native/NativeMap";
+import ThreeMap from './features/three/ThreeMap';
+import NativeMap from './features/native/NativeMap';
+import { Switch } from './components/ui/Switch';
 
-export const App = () => {
+function App() {
+  const [isThreeMode, setIsThreeMode] = React.useState(false);
+
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="max-w-7xl mx-auto">
-        <NativeMap />
+    <div className="w-full h-screen relative">
+      <div className="fixed top-5 right-5 z-50 flex items-center gap-2">
+        <span>2D</span>
+        <Switch 
+          checked={isThreeMode} 
+          onCheckedChange={setIsThreeMode}
+        />
+        <span>3D</span>
       </div>
+      {isThreeMode ? <ThreeMap /> : <NativeMap />}
     </div>
   );
 }
