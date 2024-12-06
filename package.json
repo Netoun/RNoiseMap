@@ -10,29 +10,31 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@fontsource/changa": "^4.5.11",
-    "@radix-ui/colors": "^0.1.8",
-    "@radix-ui/react-switch": "^1.0.2",
-    "@react-three/drei": "^9.66.2",
-    "@react-three/fiber": "^8.13.0",
+    "@fontsource/changa": "^5.1.0",
+    "@fontsource/geist-mono": "^5.1.0",
+    "@radix-ui/colors": "^3.0.0",
+    "@radix-ui/react-switch": "^1.1.1",
+    "@react-three/drei": "^9.120.0",
+    "@react-three/fiber": "^8.17.10",
     "@stitches/react": "^1.2.8",
-    "@types/three": "^0.151.0",
+    "@tailwindcss/vite": "^4.0.0-beta.5",
+    "@types/three": "^0.170.0",
     "alea": "^1.0.1",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "simplex-noise": "^4.0.1",
-    "three": "^0.152.2"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "simplex-noise": "^4.0.3",
+    "three": "^0.171.0"
   },
   "devDependencies": {
-    "@types/react": "^18.0.28",
-    "@types/react-dom": "^18.0.11",
-    "@typescript-eslint/eslint-plugin": "^5.57.1",
-    "@typescript-eslint/parser": "^5.57.1",
-    "@vitejs/plugin-react-swc": "^3.0.0",
-    "eslint": "^8.38.0",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.3.4",
-    "typescript": "^5.0.2",
-    "vite": "^4.3.2"
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.17.0",
+    "@typescript-eslint/parser": "^8.17.0",
+    "@vitejs/plugin-react-swc": "^3.7.2",
+    "eslint": "^9.16.0",
+    "eslint-plugin-react-hooks": "^5.1.0",
+    "eslint-plugin-react-refresh": "^0.4.16",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
   }
 }

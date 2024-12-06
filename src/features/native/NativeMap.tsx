@@ -1,12 +1,12 @@
 import {
   MouseEvent,
-  // WheelEvent,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
+import * as React from "react";
 import {
   ChunkPosition,
   TILE_SIZE,
@@ -16,75 +16,34 @@ import {
   generateMapGround,
   getColor,
 } from "../../utils/generate";
-import { styled } from "@stitches/react";
 import { Card } from "../../components/atoms/Card";
-import { blackA } from "@radix-ui/colors";
 import { CHUNK_SIZE } from "../../utils/generate";
 import { useDebounce } from "../../hooks/useDebounce";
 
-const Center = styled("div", {
-  width: "100%",
-  height: "100%",
-  position: "absolute",
-  top: "0%",
-  left: "0%",
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-});
-
-const Canvas = styled("canvas", {
-  zIndex: 20,
-  "image-rendering": "crisp-edges",
-  marginBlock: "auto",
-
-  borderRadius: "0.5rem",
-  boxShadow: "0 2px 10px -3px rgb(0 0 0 / 20%)",
-});
-
-const Wrapper = styled("div", {
-  height: "100%",
-  background: `${blackA.blackA7}`,
-});
-
-const Image = styled("img", {
-  position: "absolute",
-  zIndex: 10,
-  top: 0,
-  left: 0,
-  width: "100%",
-  height: "100%",
-  opacity: 0.5,
-  filter: "blur(10px)",
-});
-
-const Header = styled("header", {
-  position: "relative",
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-  padding: "1rem",
-  zIndex: 20,
-});
-
-const Title = styled("h1", {
-  fontSize: "large",
-});
-
-const WIDTH = 800;
-const HEIGHT = 800;
-
-// const MAX_ZOOM = 5;
-// const MIN_ZOOM = 1;
-// const SCROLL_SENSITIVITY = 0.002;
 const SPEED = 0.1;
-// const OFFSET = 5;
+const VIEWPORT_PADDING = 2;
+const CHUNK_CACHE_SIZE = 100;
+
+type ChunkCache = Map<string, Tile[][]>;
+
+const isChunkVisible = (chunk: Tile[][], offset: {x: number, y: number}, width: number, height: number) => {
+  const chunkX = chunk[0][0].x * TILE_SIZE;
+  const chunkY = chunk[0][0].y * TILE_SIZE;
+  const chunkSize = CHUNK_SIZE * TILE_SIZE;
+  
+  return (
+    chunkX + chunkSize + (offset.x * TILE_SIZE) >= 0 &&
+    chunkX + (offset.x * TILE_SIZE) <= width &&
+    chunkY + chunkSize + (offset.y * TILE_SIZE) >= 0 &&
+    chunkY + (offset.y * TILE_SIZE) <= height
+  );
+};
 
 const NativeMap = () => {
   const canvasTerrainRef = useRef<HTMLCanvasElement>(null);
+  const requestedChunksRef = useRef<Set<string>>(new Set());
 
-  const [bg, setBg] = useState("");
-
-  const [chunks, setChunks] = useState<Tile[][][]>([]);
+  const [chunks, setChunks] = useState<Map<string, Tile[][]>>(new Map());
 
   const [context, setContext] = useState<CanvasRenderingContext2D | null>(null);
   // const [zoom, setZoom] = useState(MIN_ZOOM);
@@ -94,6 +53,7 @@ const NativeMap = () => {
     y: 0,
   });
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [lastRenderTime, setLastRenderTime] = useState(0);
 
   const generateChunk = useCallback((chunkPosition?: ChunkPosition) => {
     const offset = chunkPosition
@@ -106,153 +66,159 @@ const NativeMap = () => {
     return generateMapGround(offset);
   }, []);
 
-  useEffect(() => {
-    const visibleChunks = calculateVisibleChunks({
-      height: HEIGHT,
-      width: WIDTH,
-      x: offset.x,
-      y: offset.y,
-    });
+  const handleMouseMove = useCallback((event: MouseEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
 
-    const missingChunks = calculateMissingChunks(
-      visibleChunks,
-      chunks.map((chunk) => {
-        const value = chunk[0];
-        return {
-          x: value[0].x,
-          y: value[0].y,
-        };
-      })
-    );
-
-    if (missingChunks.length === 0) {
+    const now = performance.now();
+    if (now - lastRenderTime < 16) {
       return;
     }
-
-    const newChunks = [];
-    for (const missingChunk of visibleChunks) {
-      newChunks.push(generateChunk(missingChunk));
-    }
-    setChunks([...newChunks]);
-  }, [chunks, generateChunk, offset.x, offset.y]);
-
-  const handleMouseMove = (event: MouseEvent<HTMLCanvasElement>) => {
-    event.preventDefault();
+    setLastRenderTime(now);
 
     const { movementX, movementY, clientX, clientY } = event;
     const rect = canvasTerrainRef?.current?.getBoundingClientRect();
 
-    if (!rect) {
-      return;
-    }
+    if (!rect) return;
 
     if (event.buttons === 1) {
-      setOffset((prevTranslate) => {
-        const newX = Math.round(
-          prevTranslate.x + Math.round(movementX * SPEED)
-        );
-        const newY = Math.round(
-          prevTranslate.y + Math.round(movementY * SPEED)
-        );
+      setOffset(prevTranslate => {
+        const newX = Math.round(prevTranslate.x + Math.round(movementX * SPEED));
+        const newY = Math.round(prevTranslate.y + Math.round(movementY * SPEED));
 
-        setCoordinatesMouse({
-          x: Math.floor((clientX - rect?.left) / TILE_SIZE) - newX,
-          y: Math.floor((clientY - rect?.top) / TILE_SIZE) - newY,
+        requestAnimationFrame(() => {
+          setCoordinatesMouse({
+            x: Math.floor((clientX - rect.left) / TILE_SIZE) - newX,
+            y: Math.floor((clientY - rect.top) / TILE_SIZE) - newY,
+          });
         });
 
-        return {
-          x: newX,
-          y: newY,
-        };
+        return { x: newX, y: newY };
       });
-    } else {
-      if (!isMoving) {
+    } else if (!isMoving) {
+      requestAnimationFrame(() => {
         setCoordinatesMouse({
-          x: Math.floor((clientX - rect?.left) / TILE_SIZE) - offset.x,
-          y: Math.floor((clientY - rect?.top) / TILE_SIZE) - offset.y,
+          x: Math.floor((clientX - rect.left) / TILE_SIZE) - offset.x,
+          y: Math.floor((clientY - rect.top) / TILE_SIZE) - offset.y,
         });
-        return false;
-      }
+      });
     }
-  };
+  }, [isMoving, offset.x, offset.y, lastRenderTime]);
 
   useEffect(() => {
-    const canvasEle = canvasTerrainRef.current;
+    const canvas = canvasTerrainRef.current;
+    if (!canvas) return;
 
-    if (!canvasEle) {
-      return;
-    }
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
 
-    canvasEle.width = WIDTH;
-    canvasEle.height = HEIGHT;
-
-    const ctx = canvasEle.getContext("2d", { alpha: false });
-
+    const ctx = canvas.getContext("2d", { alpha: false });
     if (ctx) {
       ctx.imageSmoothingEnabled = false;
-
       setContext(ctx);
     }
+
+    return () => {
+      if (ctx) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+    };
   }, []);
 
   useEffect(() => {
-    if (!context) {
-      return;
-    }
+    if (!context) return;
+
     const startTime = performance.now();
-
+    
     context.save();
-    context.clearRect(0, 0, WIDTH, HEIGHT);
-
+    context.clearRect(0, 0, window.innerWidth, window.innerHeight);
     context.translate(offset.x * TILE_SIZE, offset.y * TILE_SIZE);
-    context.scale(1, 1);
+    
+    const visibleChunks = Array.from(chunks.values()).filter(chunk => 
+      isChunkVisible(chunk, offset, window.innerWidth, window.innerHeight)
+    );
 
-    const drawRect = (tile: Tile) => {
-      const { posX, posY, w, h, biome, values } = tile;
+    visibleChunks.forEach(chunk => {
+      // Draw tiles first
+      const flatChunk = chunk.flat();
+      let currentColor = '';
+      
+      flatChunk.forEach(tile => {
+        const newColor = getColor(tile.biome, tile.values[0]);
+        if (newColor !== currentColor) {
+          context.fillStyle = newColor;
+          currentColor = newColor;
+        }
+        context.fillRect(tile.posX, tile.posY, tile.w, tile.h);
+      });
 
-      context.beginPath();
-      context.fillStyle = getColor(biome, values[0]);
-      context.fillRect(posX, posY, w, h);
-    };
-
-    const drawChunk = (chunk: Tile[][]) => {
+      // Draw chunk border immediately after its tiles
       const position = chunk[0][0];
-
-      context.beginPath();
       context.strokeStyle = "red";
+      context.lineWidth = 1;
       context.strokeRect(
         position.x * TILE_SIZE,
         position.y * TILE_SIZE,
         TILE_SIZE * CHUNK_SIZE,
         TILE_SIZE * CHUNK_SIZE
       );
-    };
-
-    if (chunks && chunks?.length > 0) {
-      for (const chunk of chunks) {
-        drawChunk(chunk);
-        for (const tile of chunk.flat()) {
-          drawRect(tile);
-        }
-      }
-    }
+    });
 
     context.restore();
-    setBg(
-      (canvasTerrainRef && canvasTerrainRef.current?.toDataURL("image/png")) ||
-        ""
-    );
-    const endTime = performance.now();
-    console.log(`${endTime - startTime}ms`);
+
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`Render time: ${performance.now() - startTime}ms`);
+    }
   }, [chunks, context, offset]);
+
+  const getChunkKey = (x: number, y: number) => `${x},${y}`;
+
+  useEffect(() => {
+    const visibleChunks = calculateVisibleChunks({
+      height: window.innerHeight + (VIEWPORT_PADDING * CHUNK_SIZE * TILE_SIZE),
+      width: window.innerWidth + (VIEWPORT_PADDING * CHUNK_SIZE * TILE_SIZE),
+      x: offset.x,
+      y: offset.y,
+    });
+
+    const missingChunks = visibleChunks.filter(chunk => {
+      const key = getChunkKey(chunk.x, chunk.y);
+      return !chunks.has(key);
+    });
+
+    if (missingChunks.length === 0) return;
+
+    // Générer les nouveaux chunks
+    const newChunks = new Map(chunks);
+    missingChunks.forEach(chunk => {
+      const key = getChunkKey(chunk.x, chunk.y);
+      newChunks.set(key, generateChunk(chunk));
+    });
+
+    // Nettoyer les chunks non visibles si nécessaire
+    if (newChunks.size > CHUNK_CACHE_SIZE) {
+      const visibleKeys = new Set(
+        visibleChunks.map(chunk => getChunkKey(chunk.x, chunk.y))
+      );
+      
+      // Supprimer les chunks non visibles les plus anciens
+      Array.from(newChunks.keys())
+        .filter(key => !visibleKeys.has(key))
+        .slice(0, newChunks.size - CHUNK_CACHE_SIZE)
+        .forEach(key => newChunks.delete(key));
+    }
+
+    setChunks(newChunks);
+  }, [offset.x, offset.y, generateChunk]);
+
+  const handleMouseDown = useCallback(() => setIsMoving(true), []);
+  const handleMouseUp = useCallback(() => setIsMoving(false), []);
 
   const chunksDebounced = useDebounce(chunks, 200);
   const coordinatesMouseDebounced = useDebounce(coordinatesMouse, 200);
 
   const currentTile = useMemo(() => {
-    const tile = chunksDebounced
-      .flat()
-      .flat()
+    const allTiles = Array.from(chunksDebounced.values())
+      .flatMap(chunk => chunk.flat())
       .find((tile) => {
         return (
           tile.x === coordinatesMouseDebounced.x &&
@@ -260,48 +226,40 @@ const NativeMap = () => {
         );
       });
 
-    return tile;
+    return allTiles;
   }, [chunksDebounced, coordinatesMouseDebounced]);
 
   return (
-    <Wrapper>
-      <Image src={bg} />
-      <Header>
-        <Card
-          css={{
-            justifySelf: "start",
-          }}
-        >
-          <span>x: {coordinatesMouse.x}</span>/
-          <span>y: {coordinatesMouse.y}</span>
-        </Card>
-        <Card
-          css={{
-            justifySelf: "center",
-          }}
-        >
-          <Title>Procedural map</Title>
-        </Card>
-        <Card
-          css={{
-            justifySelf: "end",
-          }}
-        >
-          <span>Biome: {currentTile?.biome}</span>
-        </Card>
-      </Header>
+    <div className="w-full h-full relative bg-[rgba(0,0,0,0.4)]">
+      <header className="fixed inset-x-0 top-4 z-20 px-4">
+        <div className="mx-auto max-w-3xl bg-black/40 backdrop-blur-md rounded-2xl p-3 flex items-center gap-6 border border-white/5">
+          <div className="text-sm text-white/70">
+            <span>x: {coordinatesMouse.x}</span>
+            <span className="mx-1">·</span>
+            <span>y: {coordinatesMouse.y}</span>
+          </div>
 
-      <Center>
-        <Canvas
+          <div className="flex-1 text-center font-light text-white/90">
+            Procedural Map
+          </div>
+
+          <div className="text-sm text-white/70 capitalize">
+            Biome: {currentTile?.biome || '—'}
+          </div>
+        </div>
+      </header>
+
+      <div className="flex items-center justify-center relative z-10">
+        <canvas
           ref={canvasTerrainRef}
-          // onWheel={handleWheel}
           onMouseMove={handleMouseMove}
-          onMouseDown={() => setIsMoving(true)}
-          onMouseUp={() => setIsMoving(false)}
-          style={{ cursor: "grab" }}
+          onMouseDown={handleMouseDown}
+          onMouseUp={handleMouseUp}
+          style={{ cursor: isMoving ? "grabbing" : "grab" }}
+          className="z-20 [image-rendering:crisp-edges] my-auto rounded-lg shadow-[0_2px_10px_-3px_rgba(0,0,0,0.2)]"
         />
-      </Center>
-    </Wrapper>
+      </div>
+    </div>
   );
 };
 

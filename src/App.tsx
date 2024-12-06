@@ -1,15 +1,13 @@
-import { styled } from "@stitches/react";
+import * as React from 'react';
 import NativeMap from "./features/native/NativeMap";
 
-const Wrapper = styled("main", {
-  height: "100%",
-});
-
-function App() {
+export const App = () => {
   return (
-    <Wrapper>
-      <NativeMap />
-    </Wrapper>
+    <div className="min-h-screen bg-gray-100">
+      <div className="max-w-7xl mx-auto">
+        <NativeMap />
+      </div>
+    </div>
   );
 }
 

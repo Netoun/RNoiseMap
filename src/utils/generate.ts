@@ -98,18 +98,19 @@ export type Tile = {
   w: number;
   values: number[];
   biome: Biome;
+  neighbors?: Tile[];
 };
 
 export const colors: { [key in Biome]: HSL } = {
-  ocean: { h: 230, s: 0, l: 0 },
-  ice: { h: 210, s: 0, l: 0 },
-  grassland: { h: 120, s: 0, l: 0 },
-  desert: { h: 60, s: 0, l: 0 },
-  beach: { h: 60, s: 0, l: 0 },
-  mountains: { h: 25, s: 0, l: 0 },
-  forest: { h: 130, s: 50, l: -20 },
-  jungle: { h: 140, s: 0, l: 0 },
-  tundra: { h: 200, s: 0, l: 0 },
+  ocean: { h: 200, s: 70, l: 45 },
+  ice: { h: 200, s: 20, l: 85 },
+  grassland: { h: 100, s: 60, l: 40 },
+  desert: { h: 35, s: 80, l: 75 },
+  beach: { h: 45, s: 70, l: 70 },
+  mountains: { h: 0, s: 30, l: 60 },
+  forest: { h: 120, s: 70, l: 25 },
+  jungle: { h: 140, s: 80, l: 20 },
+  tundra: { h: 200, s: 25, l: 75 },
 };
 
 interface ScreenPosition {
@@ -195,16 +196,45 @@ export function getBiome(
   return (biome ? biome : "ocean") as Biome;
 }
 
-export const getColor = (biome: Biome, value: number) => {
-  const saturation = Math.round(
-    ((Math.abs(value) * 100) / 100) * (75 - 25) + 25
-  );
-  const color = colors[biome];
+type BiomeTransition = {
+  from: Biome;
+  to: Biome;
+  blend: number;
+};
 
-  const h = color.h;
-  const s = color.s + (value < 0 ? saturation : 100 - saturation);
-  const l = color.l + 50;
-  return `hsl(${h}, ${s}%, ${l}%)`;
+const TRANSITION_DISTANCE = 0.2;
+
+export const getColor = (biome: Biome, value: number, neighbors?: Tile[]) => {
+  const baseColor = colors[biome];
+  
+  if (!neighbors) {
+    return `hsl(${baseColor.h}, ${baseColor.s}%, ${baseColor.l}%)`;
+  }
+
+  const transitions: BiomeTransition[] = neighbors
+    .filter(n => n && n.biome !== biome)
+    .map(n => ({
+      from: biome,
+      to: n.biome,
+      blend: Math.max(0, TRANSITION_DISTANCE - Math.abs(value - n.values[0]))
+    }));
+
+  if (transitions.length === 0) {
+    return `hsl(${baseColor.h}, ${baseColor.s}%, ${baseColor.l}%)`;
+  }
+
+  const strongestTransition = transitions.reduce((prev, curr) => 
+    prev.blend > curr.blend ? prev : curr
+  );
+
+  const toColor = colors[strongestTransition.to];
+  const blendFactor = strongestTransition.blend / TRANSITION_DISTANCE;
+
+  const h = baseColor.h + (toColor.h - baseColor.h) * blendFactor;
+  const s = baseColor.s + (toColor.s - baseColor.s) * blendFactor;
+  const l = baseColor.l + (toColor.l - baseColor.l) * blendFactor;
+
+  return `hsl(${Math.round(h)}, ${Math.round(s)}%, ${Math.round(l)}%)`;
 };
 
 export function fBm(
