@@ -11,6 +11,8 @@ import {
   getColor,
   CHUNK_SIZE,
 } from "../../utils/generate";
+import { useSearchParams } from "react-router";
+import { useDebounce } from "../../hooks/useDebounce";
 
 const VIEWPORT_PADDING = 2;
 const CHUNK_CACHE_SIZE = 100;
@@ -29,24 +31,21 @@ const ChunkMesh = ({ chunk }: ChunkMeshProps) => {
     const vertices: number[] = [];
     const colors: number[] = [];
     
-    chunk.forEach(row => {
-      row.forEach(tile => {
-        // Création d'un quad (2 triangles) pour chaque tile
+    chunk.forEach((row, rowIndex) => {
+      row.forEach((tile, colIndex) => {
         const x = tile.x * TILE_SIZE;
-        const y = tile.y * TILE_SIZE;
+        const z = tile.y * TILE_SIZE;
+        
         const color = new THREE.Color(getColor(tile.biome, tile.values[0]));
 
-        // Premier triangle
-        vertices.push(x, -y, 0);
-        vertices.push(x + TILE_SIZE, -y, 0);
-        vertices.push(x, -(y + TILE_SIZE), 0);
+        vertices.push(x, 0, -z);
+        vertices.push(x + TILE_SIZE, 0, -z);
+        vertices.push(x, 0, -(z + TILE_SIZE));
 
-        // Deuxième triangle
-        vertices.push(x + TILE_SIZE, -y, 0);
-        vertices.push(x + TILE_SIZE, -(y + TILE_SIZE), 0);
-        vertices.push(x, -(y + TILE_SIZE), 0);
+        vertices.push(x + TILE_SIZE, 0, -z);
+        vertices.push(x + TILE_SIZE, 0, -(z + TILE_SIZE));
+        vertices.push(x, 0, -(z + TILE_SIZE));
 
-        // Couleurs pour chaque vertex
         for (let i = 0; i < 6; i++) {
           colors.push(color.r, color.g, color.b);
         }
@@ -80,13 +79,23 @@ const ChunkMesh = ({ chunk }: ChunkMeshProps) => {
   );
 };
 
+const initInitialOffset = () => {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    x: parseInt(params.get("x") || "0"),
+    y: parseInt(params.get("y") || "0"),
+  };
+};
+
 type MapContentProps = {
   seed: string;
 };
 
+
 const MapContent = ({ seed }: MapContentProps) => {
+  const [_, setSearchParams] = useSearchParams();
   const [chunks, setChunks] = useState<ChunkCache>(new Map());
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [offset, setOffset] = useState(initInitialOffset());
   const { camera, viewport } = useThree();
 
   const generateChunk = useCallback((chunkPosition?: ChunkPosition) => {
@@ -99,6 +108,21 @@ const MapContent = ({ seed }: MapContentProps) => {
 
     return generateMapGround(offset, seed);
   }, []);
+
+  const updateSearchParams = (x: number, y: number) => {
+    setSearchParams({
+      x: x.toString(),
+      y: y.toString(),
+    });
+  }
+
+  const debouncedX = useDebounce(offset.x, 500);
+  const debouncedY = useDebounce(offset.y, 500);
+
+  useEffect(() => {
+    
+    updateSearchParams(debouncedX, debouncedY);
+  }, [debouncedX, debouncedY]);
 
   const getChunkKey = (x: number, y: number) => `${x},${y}`;
 
@@ -133,9 +157,12 @@ const MapContent = ({ seed }: MapContentProps) => {
   }, [offset, viewport, generateChunk]);
 
   useFrame(() => {
+
+    const x = Math.round(camera.position.x / TILE_SIZE);
+    const y = Math.round(-camera.position.z / TILE_SIZE);
     setOffset({
-      x: -camera.position.x / TILE_SIZE,
-      y: camera.position.y / TILE_SIZE,
+      x,
+      y,
     });
   });
 
@@ -154,9 +181,9 @@ type ThreeMapProps = {
 
 const ThreeMap = ({ seed }: ThreeMapProps) => {
   return (
-    <div className="w-full h-full relative bg-[rgba(0,0,0,0.4)]">
+    <div className="h-screen w-screen relative bg-[rgba(0,0,0,0.4)]">
       <header className="fixed inset-x-0 top-4 z-20 px-4">
-        <div className="mx-auto max-w-3xl bg-black/40 backdrop-blur-md rounded-2xl p-3 flex items-center gap-6 border border-white/5">
+        <div className="mx-auto max-w-3xl bg-black/70 backdrop-blur-md rounded-2xl p-3 flex items-center gap-6 border border-white/5">
           <div className="flex-1 text-center font-light text-white/90">
             Procedural Map (Three.js)
           </div>
@@ -164,15 +191,28 @@ const ThreeMap = ({ seed }: ThreeMapProps) => {
       </header>
 
       <Canvas
-        camera={{ position: [0, 0, 500], up: [0, 0, 1] }}
+        camera={{ 
+          position: [0, 500, 0],
+          up: [0, 0, -1],
+          fov: 75,
+          near: 0.1,
+          far: 2000
+        }}
         className="w-full h-full"
       >
         <MapContent seed={seed} />
         <OrbitControls 
           enableRotate={false}
           enableZoom={true}
-          zoomSpeed={2}
-          panSpeed={2}
+          zoomSpeed={1}
+          panSpeed={1}
+          target={[0, 0, 0]}
+          screenSpacePanning={true}
+          mouseButtons={{
+            LEFT: THREE.MOUSE.PAN,
+            MIDDLE: THREE.MOUSE.DOLLY,
+            RIGHT: THREE.MOUSE.PAN
+          }}
         />
       </Canvas>
     </div>

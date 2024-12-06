@@ -97,30 +97,27 @@ const NativeMap = ({ seed }: NativeMapProps) => {
     event.preventDefault();
 
     const now = performance.now();
-    if (now - lastRenderTime < 16) {
-      return;
-    }
+    if (now - lastRenderTime < 16) return;
     setLastRenderTime(now);
 
     const { movementX, movementY, clientX, clientY } = event;
     const rect = canvasTerrainRef?.current?.getBoundingClientRect();
-
     if (!rect) return;
 
-    requestAnimationFrame(() => {
+    if (event.buttons === 1) {
+      setOffset(prevTranslate => ({
+        x: Math.round(prevTranslate.x + (movementX * SPEED) / zoom),
+        y: Math.round(prevTranslate.y + (movementY * SPEED) / zoom)
+      }));
+    }
+
+    if (!isMoving) {
       setCoordinatesMouse({
         x: Math.floor((clientX - rect.left) / (TILE_SIZE * zoom)) - offset.x,
         y: Math.floor((clientY - rect.top) / (TILE_SIZE * zoom)) - offset.y,
       });
-    });
-
-    if (event.buttons === 1) {
-      setOffset(prevTranslate => ({
-        x: Math.round(prevTranslate.x + Math.round((movementX * SPEED) / zoom)),
-        y: Math.round(prevTranslate.y + Math.round((movementY * SPEED) / zoom))
-      }));
     }
-  }, [lastRenderTime, zoom, offset.x, offset.y]);
+  }, [lastRenderTime, zoom, offset.x, offset.y, isMoving]);
 
   const handleWheel = useCallback((event: React.WheelEvent<HTMLCanvasElement>) => {
     event.preventDefault();
@@ -181,31 +178,38 @@ const NativeMap = ({ seed }: NativeMapProps) => {
       isChunkVisible(chunk, offset, window.innerWidth, window.innerHeight, zoom)
     );
 
+    const colorGroups: Record<string, Tile[]> = {};
+    
     visibleChunks.forEach(chunk => {
-      // Draw tiles first
-      const flatChunk = chunk.flat();
-      let currentColor = '';
-      
-      flatChunk.forEach(tile => {
-        const newColor = getColor(tile.biome, tile.values[0]);
-        if (newColor !== currentColor) {
-          context.fillStyle = newColor;
-          currentColor = newColor;
+      chunk.flat().forEach(tile => {
+        const color = getColor(tile.biome, tile.values[0]);
+        if (!colorGroups[color]) {
+          colorGroups[color] = [];
         }
+        colorGroups[color].push(tile);
+      });
+    });
+
+    Object.entries(colorGroups).forEach(([color, tiles]) => {
+      context.fillStyle = color;
+      tiles.forEach(tile => {
         context.fillRect(tile.posX, tile.posY, tile.w, tile.h);
       });
+    });
 
-      // Draw chunk border immediately after its tiles
-      const position = chunk[0][0];
+    if (import.meta.env.DEV) {
       context.strokeStyle = "red";
       context.lineWidth = 1;
-      context.strokeRect(
-        position.x * TILE_SIZE,
-        position.y * TILE_SIZE,
-        TILE_SIZE * CHUNK_SIZE,
-        TILE_SIZE * CHUNK_SIZE
-      );
-    });
+      visibleChunks.forEach(chunk => {
+        const position = chunk[0][0];
+        context.strokeRect(
+          position.x * TILE_SIZE,
+          position.y * TILE_SIZE,
+          TILE_SIZE * CHUNK_SIZE,
+          TILE_SIZE * CHUNK_SIZE
+        );
+      });
+    }
 
     context.restore();
 
@@ -231,20 +235,17 @@ const NativeMap = ({ seed }: NativeMapProps) => {
 
     if (missingChunks.length === 0) return;
 
-    // Générer les nouveaux chunks
     const newChunks = new Map(chunks);
     missingChunks.forEach(chunk => {
       const key = getChunkKey(chunk.x, chunk.y);
       newChunks.set(key, generateChunk(chunk));
     });
 
-    // Nettoyer les chunks non visibles si nécessaire
     if (newChunks.size > CHUNK_CACHE_SIZE) {
       const visibleKeys = new Set(
         visibleChunks.map(chunk => getChunkKey(chunk.x, chunk.y))
       );
       
-      // Supprimer les chunks non visibles les plus anciens
       Array.from(newChunks.keys())
         .filter(key => !visibleKeys.has(key))
         .slice(0, newChunks.size - CHUNK_CACHE_SIZE)
@@ -327,7 +328,6 @@ const NativeMap = ({ seed }: NativeMapProps) => {
     if (!lastTouch) return;
 
     if (event.touches.length === 2 && initialPinchDistance) {
-      // Handle pinch zoom
       const currentDistance = getTouchDistance(event.touches[0], event.touches[1]);
       const deltaDistance = currentDistance - lastTouch.distance!;
       
@@ -336,7 +336,6 @@ const NativeMap = ({ seed }: NativeMapProps) => {
         setZoom(prev => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prev + zoomDelta)));
       }
 
-      // Handle pan during pinch
       const currentX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
       const currentY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
       const deltaX = currentX - lastTouch.x;
@@ -353,7 +352,6 @@ const NativeMap = ({ seed }: NativeMapProps) => {
         distance: currentDistance,
       });
     } else if (event.touches.length === 1) {
-      // Handle single touch pan
       const deltaX = event.touches[0].clientX - lastTouch.x;
       const deltaY = event.touches[0].clientY - lastTouch.y;
 
@@ -378,7 +376,7 @@ const NativeMap = ({ seed }: NativeMapProps) => {
   return (
     <div className="w-full h-full relative bg-[rgba(0,0,0,0.4)]">
       <header className="fixed inset-x-0 bottom-4 h-fit md:top-4 z-20 px-4">
-        <div className="mx-auto max-w-3xl bg-black/40 backdrop-blur-md rounded-2xl p-3 flex justify-between3 items-center gap-6 border border-white/5">
+        <div className="mx-auto max-w-3xl bg-black/70 backdrop-blur-md rounded-2xl p-3 flex justify-between3 items-center gap-6 border border-white/5">
           <div className="text-sm text-white/70">
             <span>x: {coordinatesMouse.x}</span>
             <span className="mx-1">·</span>
