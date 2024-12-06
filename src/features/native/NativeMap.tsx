@@ -142,10 +142,10 @@ const NativeMap = ({ seed }: NativeMapProps) => {
           const worldX = mouseX / (TILE_SIZE * prevZoom) - offset.x;
           const worldY = mouseY / (TILE_SIZE * prevZoom) - offset.y;
           
-          setOffset(prev => ({
+          setOffset({
             x: Math.round(-worldX + mouseX / (TILE_SIZE * newZoom)),
             y: Math.round(-worldY + mouseY / (TILE_SIZE * newZoom))
-          }));
+          });
         }
       }
       
