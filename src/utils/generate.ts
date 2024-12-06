@@ -15,7 +15,6 @@ export function initializeNoise(seed: string) {
   const seedMoisture = alea(seed + "_moisture");
   const seedHeat = alea(seed + "_heat");
   const seedRivers = alea(seed + "_rivers");
-  const seedRegions = alea(seed + "_regions");
   
   noise2DHeight = createNoise2D(seedHeight);
   noise2DMoisture = createNoise2D(seedMoisture);
