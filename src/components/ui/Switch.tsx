@@ -1,4 +1,3 @@
-import * as React from "react";
 import * as SwitchPrimitive from "@radix-ui/react-switch";
 
 const Switch = ({ checked, onCheckedChange }: { checked: boolean, onCheckedChange: (checked: boolean) => void }) => {

@@ -11,7 +11,6 @@ import {
   getColor,
   CHUNK_SIZE,
 } from "../../utils/generate";
-import React from "react";
 
 const VIEWPORT_PADDING = 2;
 const CHUNK_CACHE_SIZE = 100;

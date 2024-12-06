@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
 } from "react";
-import * as React from "react";
 import {
   ChunkPosition,
   TILE_SIZE,
@@ -25,7 +24,6 @@ const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
 const ZOOM_SPEED = 0.1;
 
-type ChunkCache = Map<string, Tile[][]>;
 
 const isChunkVisible = (chunk: Tile[][], offset: {x: number, y: number}, width: number, height: number, zoom: number) => {
   const chunkX = chunk[0][0].x * TILE_SIZE;
@@ -45,19 +43,31 @@ const isChunkVisible = (chunk: Tile[][], offset: {x: number, y: number}, width: 
   );
 };
 
+const getInitialValues = () => {
+  const params = new URLSearchParams(window.location.search);
+  return {
+    zoom: Number(Number(params.get('zoom')).toFixed(1)) || 1,
+    x: Math.round(Number(params.get('x'))) || 0,
+    y: Math.round(Number(params.get('y'))) || 0
+  };
+};
+
+
+
 const NativeMap = () => {
+  const initialValues = getInitialValues();
   const canvasTerrainRef = useRef<HTMLCanvasElement>(null);
 
   const [chunks, setChunks] = useState<Map<string, Tile[][]>>(new Map());
 
   const [context, setContext] = useState<CanvasRenderingContext2D | null>(null);
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(initialValues.zoom);
   const [isMoving, setIsMoving] = useState(false);
   const [coordinatesMouse, setCoordinatesMouse] = useState({
-    x: 0,
-    y: 0,
+    x: initialValues.x,
+    y: initialValues.y,
   });
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [offset, setOffset] = useState({ x: initialValues.x, y: initialValues.y });
   const [lastRenderTime, setLastRenderTime] = useState(0);
 
   const generateChunk = useCallback((chunkPosition?: ChunkPosition) => {
@@ -123,8 +133,8 @@ const NativeMap = () => {
           const mouseY = event.clientY - rect.top;
           
           setOffset(prev => ({
-            x: prev.x - (mouseX / (TILE_SIZE * prevZoom) - mouseX / (TILE_SIZE * newZoom)),
-            y: prev.y - (mouseY / (TILE_SIZE * prevZoom) - mouseY / (TILE_SIZE * newZoom))
+            x: Math.round(prev.x - (mouseX / (TILE_SIZE * prevZoom) - mouseX / (TILE_SIZE * newZoom))),
+            y: Math.round(prev.y - (mouseY / (TILE_SIZE * prevZoom) - mouseY / (TILE_SIZE * newZoom)))
           }));
         }
       }
@@ -259,6 +269,19 @@ const NativeMap = () => {
 
     return allTiles;
   }, [chunksDebounced, coordinatesMouseDebounced]);
+
+
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    
+    params.set('zoom', zoom.toFixed(1));
+    params.set('x', Math.round(offset.x).toString());
+    params.set('y', Math.round(offset.y).toString());
+    
+    const newUrl = `${window.location.pathname}?${params.toString()}`;
+    window.history.replaceState({}, '', newUrl);
+  }, [zoom, offset.x, offset.y]);
 
   return (
     <div className="w-full h-full relative bg-[rgba(0,0,0,0.4)]">
