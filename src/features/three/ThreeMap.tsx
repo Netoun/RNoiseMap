@@ -31,8 +31,8 @@ const ChunkMesh = ({ chunk }: ChunkMeshProps) => {
     const vertices: number[] = [];
     const colors: number[] = [];
     
-    chunk.forEach((row, rowIndex) => {
-      row.forEach((tile, colIndex) => {
+    chunk.forEach((row) => {
+      row.forEach((tile) => {
         const x = tile.x * TILE_SIZE;
         const z = tile.y * TILE_SIZE;
         
