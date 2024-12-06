@@ -7,8 +7,6 @@ let noise2DHeight: NoiseFunction2D;
 let noise2DMoisture: NoiseFunction2D;
 let noise2DHeat: NoiseFunction2D;
 let noise2DRivers: NoiseFunction2D;
-let noise2DRegions: NoiseFunction2D;
-
 const biomeCache = new Map<string, Biome>();
 const colorCache = new Map<string, string>();
 
@@ -23,7 +21,6 @@ export function initializeNoise(seed: string) {
   noise2DMoisture = createNoise2D(seedMoisture);
   noise2DHeat = createNoise2D(seedHeat);
   noise2DRivers = createNoise2D(seedRivers);
-  noise2DRegions = createNoise2D(seedRegions);
 }
 
 export const CHUNK_SIZE = 60;
