@@ -14,12 +14,12 @@ const Legend = () => {
   };
 
   return (
-    <div className="fixed bottom-4 right-4 bg-black/70 backdrop-blur-md text-white p-4 z-50 rounded-lg shadow-lg max-w-xs">
+    <div className="fixed bottom-4 right-4 bg-black/70 backdrop-blur-md text-white px-4 py-2 z-50 rounded-2xl shadow-lg max-w-xs">
       <button
-        className="w-full flex items-center justify-between"
+        className="w-full flex items-center justify-between focus:outline-none"
         onClick={() => setIsExpanded(!isExpanded)}
       >
-        <h3 className="font-semibold">Légende</h3>
+        <h3>Légende</h3>
         <span className="text-sm ml-2">
           {isExpanded ? (
             <ChevronDownIcon className="w-4 h-4" />

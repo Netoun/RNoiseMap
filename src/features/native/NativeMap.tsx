@@ -139,16 +139,19 @@ const NativeMap = ({ seed }: NativeMapProps) => {
           const mouseX = event.clientX - rect.left;
           const mouseY = event.clientY - rect.top;
           
+          const worldX = mouseX / (TILE_SIZE * prevZoom) - offset.x;
+          const worldY = mouseY / (TILE_SIZE * prevZoom) - offset.y;
+          
           setOffset(prev => ({
-            x: Math.round(prev.x - (mouseX / (TILE_SIZE * prevZoom) - mouseX / (TILE_SIZE * newZoom))),
-            y: Math.round(prev.y - (mouseY / (TILE_SIZE * prevZoom) - mouseY / (TILE_SIZE * newZoom)))
+            x: Math.round(-worldX + mouseX / (TILE_SIZE * newZoom)),
+            y: Math.round(-worldY + mouseY / (TILE_SIZE * newZoom))
           }));
         }
       }
       
       return newZoom;
     });
-  }, []);
+  }, [offset]);
 
   useEffect(() => {
     const canvas = canvasTerrainRef.current;
@@ -183,11 +186,11 @@ const NativeMap = ({ seed }: NativeMapProps) => {
     
     let tileScale = 1;
     if (zoom < QUALITY_THRESHOLDS.LOW) {
-      tileScale = 4; // Très faible zoom: 4x4
+      tileScale = 5; // Très faible zoom: 4x4
     } else if (zoom < QUALITY_THRESHOLDS.MEDIUM) {
-      tileScale = 2; // Zoom moyen: 2x2
+      tileScale = 3; // Zoom moyen: 2x2
     } else if (zoom < QUALITY_THRESHOLDS.HIGH) {
-      tileScale = 1; // Zoom élevé: qualité native
+      tileScale = 2; // Zoom élevé: qualité native
     } else {
       // Au-dessus de HIGH: qualité maximale avec antialiasing
       context.imageSmoothingEnabled = true;
@@ -429,20 +432,20 @@ const NativeMap = ({ seed }: NativeMapProps) => {
   return (
     <div className="w-full h-full relative bg-[rgba(0,0,0,0.4)]">
       <header className="fixed inset-x-0 bottom-4 h-fit md:top-4 z-20 px-4">
-        <div className="mx-auto max-w-3xl bg-black/70 backdrop-blur-md rounded-2xl p-3 flex justify-between3 items-center gap-6 border border-white/5">
-          <div className="text-sm text-white/70">
+        <div className="w-fit min-w-32 md:mx-auto max-w-3xl bg-black/70 backdrop-blur-md rounded-2xl p-3 flex flex-col md:flex-row justify-between md:items-center gap-6 border border-white/5">
+          <div className="flex flex-col md:flex-row text-sm text-white/70">
             <span>x: {coordinatesMouse.x}</span>
-            <span className="mx-1">·</span>
+            <span className="hidden md:block mx-1">·</span>
             <span>y: {coordinatesMouse.y}</span>
-
-            <span className="ml-6">
+            <span className="hidden md:block mx-3">
+              /
+            </span>
+            <span>
               zoom: {zoom.toFixed(1)}
             </span>
           </div>
 
-          <div className="flex-1 hidden md:block text-center font-light text-white/90">
-            Procedural Map
-          </div>
+        
 
           <div className="text-sm text-white/70 capitalize">
             Biome: {currentTile?.biome || '—'}

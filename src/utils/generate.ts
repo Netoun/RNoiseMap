@@ -380,3 +380,11 @@ export const generateMapGround = (
 
   return chunk;
 };
+
+export const getBiomeByCoords = (x: number, y: number): Biome => {
+  const height = fBm(noise2DHeight, x, y, 8, 0.5, 0.005, 1);
+  const moisture = fBm(noise2DMoisture, x, y, 4, 0.5, 0.008, 0.7);
+  const heat = fBm(noise2DHeat, x, y, 6, 0.5, 0.006, 0.8);
+
+  return getBiome(height, moisture, heat, x, y);
+};

@@ -1,5 +1,22 @@
 @import "tailwindcss";
 
 @theme {
+    @keyframes generate-map {
+        0% {
+            opacity: 0;
+        }
+        100% {
+            opacity: 1;
+        }
+    }
+
+    --animate-generate-map: generate-map 0.5s ease-in-out;
+
     --font-display: 'Geist Mono', monospace;
+}
+
+@layer base {
+    body {
+        background: linear-gradient(to bottom, #000, #111);
+    }
 }
