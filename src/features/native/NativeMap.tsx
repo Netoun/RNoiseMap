@@ -27,6 +27,13 @@ const ZOOM_SPEED = 0.1;
 const TOUCH_SPEED = 0.15;
 const MIN_PINCH_DISTANCE = 50;
 
+const QUALITY_THRESHOLDS = {
+  LOW: 0.7,     // En dessous de 0.7x zoom -> 4x4
+  MEDIUM: 1.4,  // Entre 0.7x et 1.4x zoom -> 2x2
+  HIGH: 2.0     // Entre 1.4x et 2.0x zoom -> 1x1 (qualité native)
+  // Au-dessus de 2.0x = qualité maximale avec antialiasing
+};
+
 type TouchInfo = {
   x: number;
   y: number;
@@ -174,6 +181,20 @@ const NativeMap = ({ seed }: NativeMapProps) => {
     context.scale(zoom, zoom);
     context.translate(offset.x * TILE_SIZE, offset.y * TILE_SIZE);
     
+    let tileScale = 1;
+    if (zoom < QUALITY_THRESHOLDS.LOW) {
+      tileScale = 4; // Très faible zoom: 4x4
+    } else if (zoom < QUALITY_THRESHOLDS.MEDIUM) {
+      tileScale = 2; // Zoom moyen: 2x2
+    } else if (zoom < QUALITY_THRESHOLDS.HIGH) {
+      tileScale = 1; // Zoom élevé: qualité native
+    } else {
+      // Au-dessus de HIGH: qualité maximale avec antialiasing
+      context.imageSmoothingEnabled = true;
+      context.imageSmoothingQuality = 'high';
+      tileScale = 1;
+    }
+    
     const visibleChunks = Array.from(chunks.values()).filter(chunk => 
       isChunkVisible(chunk, offset, window.innerWidth, window.innerHeight, zoom)
     );
@@ -181,13 +202,45 @@ const NativeMap = ({ seed }: NativeMapProps) => {
     const colorGroups: Record<string, Tile[]> = {};
     
     visibleChunks.forEach(chunk => {
-      chunk.flat().forEach(tile => {
-        const color = getColor(tile.biome, tile.values[0]);
-        if (!colorGroups[color]) {
-          colorGroups[color] = [];
+      for (let y = 0; y < chunk.length; y += tileScale) {
+        for (let x = 0; x < chunk[0].length; x += tileScale) {
+          const baseTile = chunk[Math.floor(y)][Math.floor(x)];
+          
+          if (tileScale > 1) {
+            let totalBiomeValues = { biome: baseTile.biome, value: baseTile.values[0] };
+            let count = 1;
+            
+            for (let dy = 0; dy < tileScale && y + dy < chunk.length; dy++) {
+              for (let dx = 0; dx < tileScale && x + dx < chunk[0].length; dx++) {
+                if (dx === 0 && dy === 0) continue; // Sauter la première tuile déjà comptée
+                
+                const tile = chunk[Math.floor(y + dy)][Math.floor(x + dx)];
+                totalBiomeValues.value += tile.values[0];
+                count++;
+              }
+            }
+            
+            const color = getColor(totalBiomeValues.biome, totalBiomeValues.value / count);
+            if (!colorGroups[color]) {
+              colorGroups[color] = [];
+            }
+            
+            colorGroups[color].push({
+              ...baseTile,
+              w: Math.floor(baseTile.w * tileScale),
+              h: Math.floor(baseTile.h * tileScale),
+              posX: Math.floor(baseTile.posX),
+              posY: Math.floor(baseTile.posY)
+            });
+          } else {
+            const color = getColor(baseTile.biome, baseTile.values[0]);
+            if (!colorGroups[color]) {
+              colorGroups[color] = [];
+            }
+            colorGroups[color].push(baseTile);
+          }
         }
-        colorGroups[color].push(tile);
-      });
+      }
     });
 
     Object.entries(colorGroups).forEach(([color, tiles]) => {
@@ -214,7 +267,7 @@ const NativeMap = ({ seed }: NativeMapProps) => {
     context.restore();
 
     if (import.meta.env.DEV) {
-      console.log(`Render time: ${performance.now() - startTime}ms`);
+      console.log(`Render time: ${performance.now() - startTime}ms, Quality scale: ${tileScale}x`);
     }
   }, [chunks, context, offset, zoom]);
 
@@ -381,6 +434,10 @@ const NativeMap = ({ seed }: NativeMapProps) => {
             <span>x: {coordinatesMouse.x}</span>
             <span className="mx-1">·</span>
             <span>y: {coordinatesMouse.y}</span>
+
+            <span className="ml-6">
+              zoom: {zoom.toFixed(1)}
+            </span>
           </div>
 
           <div className="flex-1 hidden md:block text-center font-light text-white/90">

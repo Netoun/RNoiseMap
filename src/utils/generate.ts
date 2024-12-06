@@ -26,8 +26,8 @@ export function initializeNoise(seed: string) {
   noise2DRegions = createNoise2D(seedRegions);
 }
 
-export const CHUNK_SIZE = 50;
-export const TILE_SIZE = 10;
+export const CHUNK_SIZE = 60;
+export const TILE_SIZE = 6;
 
 export interface ChunkPosition {
   x: number;
