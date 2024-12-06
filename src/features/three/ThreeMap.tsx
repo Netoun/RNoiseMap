@@ -80,7 +80,11 @@ const ChunkMesh = ({ chunk }: ChunkMeshProps) => {
   );
 };
 
-const MapContent = () => {
+type MapContentProps = {
+  seed: string;
+};
+
+const MapContent = ({ seed }: MapContentProps) => {
   const [chunks, setChunks] = useState<ChunkCache>(new Map());
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const { camera, viewport } = useThree();
@@ -93,7 +97,7 @@ const MapContent = () => {
         }
       : undefined;
 
-    return generateMapGround(offset);
+    return generateMapGround(offset, seed);
   }, []);
 
   const getChunkKey = (x: number, y: number) => `${x},${y}`;
@@ -144,7 +148,11 @@ const MapContent = () => {
   );
 };
 
-const ThreeMap = () => {
+type ThreeMapProps = {
+  seed: string;
+};
+
+const ThreeMap = ({ seed }: ThreeMapProps) => {
   return (
     <div className="w-full h-full relative bg-[rgba(0,0,0,0.4)]">
       <header className="fixed inset-x-0 top-4 z-20 px-4">
@@ -159,7 +167,7 @@ const ThreeMap = () => {
         camera={{ position: [0, 0, 500], up: [0, 0, 1] }}
         className="w-full h-full"
       >
-        <MapContent />
+        <MapContent seed={seed} />
         <OrbitControls 
           enableRotate={false}
           enableZoom={true}

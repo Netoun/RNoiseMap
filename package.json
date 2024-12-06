@@ -17,9 +17,10 @@
     "@react-three/fiber": "^9.0.0-rc.1",
     "@tailwindcss/vite": "^4.0.0-beta.5",
     "@types/three": "^0.170.0",
-
+    "alea": "^1.0.1",
     "react": "^19.0.0-experimental-0066e04a6",
     "react-dom": "^19.0.0-experimental-0066e04a6",
+    "react-touch-events": "^3.0.0",
     "simplex-noise": "^4.0.3",
     "three": "^0.171.0"
   },

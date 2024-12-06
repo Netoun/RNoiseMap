@@ -1,15 +1,22 @@
+import alea from "alea";
 import { NoiseFunction2D, createNoise2D } from "simplex-noise";
 
-import alea from "alea";
 import { HSL } from "three";
 
-const seedHeight = alea("seedHeight");
-const seedMoisture = alea("seedMoisture");
-const seedHeat = alea("seedHeat");
+let noise2DHeight: NoiseFunction2D;
+let noise2DMoisture: NoiseFunction2D;
+let noise2DHeat: NoiseFunction2D;
 
-const noise2DHeight = createNoise2D(seedHeight);
-const noise2DMoisture = createNoise2D(seedMoisture);
-const noise2DHeat = createNoise2D(seedHeat);
+export function initializeNoise(seed: string) {
+  const seedHeight = alea(seed + "_height");
+  const seedMoisture = alea(seed + "_moisture");
+  const seedHeat = alea(seed + "_heat");
+  console.log(seedHeight, seedMoisture, seedHeat);
+  
+  noise2DHeight = createNoise2D(seedHeight);
+  noise2DMoisture = createNoise2D(seedMoisture);
+  noise2DHeat = createNoise2D(seedHeat);
+}
 
 export const CHUNK_SIZE = 50;
 export const TILE_SIZE = 10;
@@ -258,8 +265,13 @@ export function fBm(
 }
 
 export const generateMapGround = (
-  offset: Offset = { x: 0, y: 0 }
+  offset: Offset = { x: 0, y: 0 },
+  seed: string
 ): Tile[][] => {
+  if (seed) {
+    initializeNoise(seed);
+  }
+  
   const chunk: Tile[][] = [];
   for (let x = 0; x < CHUNK_SIZE; x++) {
     const row: Tile[] = [];

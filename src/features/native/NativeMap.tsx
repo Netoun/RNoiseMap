@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  TouchEvent,
 } from "react";
 import {
   ChunkPosition,
@@ -23,7 +24,14 @@ const CHUNK_CACHE_SIZE = 100;
 const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
 const ZOOM_SPEED = 0.1;
+const TOUCH_SPEED = 0.15;
+const MIN_PINCH_DISTANCE = 50;
 
+type TouchInfo = {
+  x: number;
+  y: number;
+  distance?: number;
+};
 
 const isChunkVisible = (chunk: Tile[][], offset: {x: number, y: number}, width: number, height: number, zoom: number) => {
   const chunkX = chunk[0][0].x * TILE_SIZE;
@@ -52,9 +60,11 @@ const getInitialValues = () => {
   };
 };
 
+type NativeMapProps = { 
+  seed: string;
+};
 
-
-const NativeMap = () => {
+const NativeMap = ({ seed }: NativeMapProps) => {
   const initialValues = getInitialValues();
   const canvasTerrainRef = useRef<HTMLCanvasElement>(null);
 
@@ -69,6 +79,8 @@ const NativeMap = () => {
   });
   const [offset, setOffset] = useState({ x: initialValues.x, y: initialValues.y });
   const [lastRenderTime, setLastRenderTime] = useState(0);
+  const [lastTouch, setLastTouch] = useState<TouchInfo | null>(null);
+  const [initialPinchDistance, setInitialPinchDistance] = useState<number | null>(null);
 
   const generateChunk = useCallback((chunkPosition?: ChunkPosition) => {
     const offset = chunkPosition
@@ -78,7 +90,7 @@ const NativeMap = () => {
         }
       : undefined;
 
-    return generateMapGround(offset);
+    return generateMapGround(offset, seed);
   }, []);
 
   const handleMouseMove = useCallback((event: MouseEvent<HTMLCanvasElement>) => {
@@ -95,29 +107,20 @@ const NativeMap = () => {
 
     if (!rect) return;
 
+    requestAnimationFrame(() => {
+      setCoordinatesMouse({
+        x: Math.floor((clientX - rect.left) / (TILE_SIZE * zoom)) - offset.x,
+        y: Math.floor((clientY - rect.top) / (TILE_SIZE * zoom)) - offset.y,
+      });
+    });
+
     if (event.buttons === 1) {
-      setOffset(prevTranslate => {
-        const newX = Math.round(prevTranslate.x + Math.round((movementX * SPEED) / zoom));
-        const newY = Math.round(prevTranslate.y + Math.round((movementY * SPEED) / zoom));
-
-        requestAnimationFrame(() => {
-          setCoordinatesMouse({
-            x: Math.floor((clientX - rect.left) / (TILE_SIZE * zoom)) - newX,
-            y: Math.floor((clientY - rect.top) / (TILE_SIZE * zoom)) - newY,
-          });
-        });
-
-        return { x: newX, y: newY };
-      });
-    } else if (!isMoving) {
-      requestAnimationFrame(() => {
-        setCoordinatesMouse({
-          x: Math.floor((clientX - rect.left) / (TILE_SIZE * zoom)) - offset.x,
-          y: Math.floor((clientY - rect.top) / (TILE_SIZE * zoom)) - offset.y,
-        });
-      });
+      setOffset(prevTranslate => ({
+        x: Math.round(prevTranslate.x + Math.round((movementX * SPEED) / zoom)),
+        y: Math.round(prevTranslate.y + Math.round((movementY * SPEED) / zoom))
+      }));
     }
-  }, [isMoving, offset.x, offset.y, lastRenderTime, zoom]);
+  }, [lastRenderTime, zoom, offset.x, offset.y]);
 
   const handleWheel = useCallback((event: React.WheelEvent<HTMLCanvasElement>) => {
     event.preventDefault();
@@ -251,8 +254,15 @@ const NativeMap = () => {
     setChunks(newChunks);
   }, [offset.x, offset.y, generateChunk, zoom]);
 
-  const handleMouseDown = useCallback(() => setIsMoving(true), []);
-  const handleMouseUp = useCallback(() => setIsMoving(false), []);
+  const handleMouseDown = useCallback((event: MouseEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+    setIsMoving(true);
+  }, []);
+
+  const handleMouseUp = useCallback((event: MouseEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+    setIsMoving(false);
+  }, []);
 
   const chunksDebounced = useDebounce(chunks, 200);
   const coordinatesMouseDebounced = useDebounce(coordinatesMouse, 200);
@@ -283,17 +293,99 @@ const NativeMap = () => {
     window.history.replaceState({}, '', newUrl);
   }, [zoom, offset.x, offset.y]);
 
+  const getTouchDistance = (touch1: React.Touch, touch2: React.Touch): number => {
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const handleTouchStart = useCallback((event: TouchEvent<HTMLCanvasElement>) => {
+    
+    event.preventDefault();
+    setIsMoving(true);
+    
+    if (event.touches.length === 2) {
+      const distance = getTouchDistance(event.touches[0], event.touches[1]);
+      setInitialPinchDistance(distance);
+      setLastTouch({
+        x: (event.touches[0].clientX + event.touches[1].clientX) / 2,
+        y: (event.touches[0].clientY + event.touches[1].clientY) / 2,
+        distance,
+      });
+    } else {
+      setInitialPinchDistance(null);
+      setLastTouch({
+        x: event.touches[0].clientX,
+        y: event.touches[0].clientY,
+      });
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((event: TouchEvent<HTMLCanvasElement>) => {
+    event.preventDefault();
+    
+    if (!lastTouch) return;
+
+    if (event.touches.length === 2 && initialPinchDistance) {
+      // Handle pinch zoom
+      const currentDistance = getTouchDistance(event.touches[0], event.touches[1]);
+      const deltaDistance = currentDistance - lastTouch.distance!;
+      
+      if (Math.abs(deltaDistance) > MIN_PINCH_DISTANCE) {
+        const zoomDelta = deltaDistance > 0 ? ZOOM_SPEED : -ZOOM_SPEED;
+        setZoom(prev => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, prev + zoomDelta)));
+      }
+
+      // Handle pan during pinch
+      const currentX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+      const currentY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
+      const deltaX = currentX - lastTouch.x;
+      const deltaY = currentY - lastTouch.y;
+
+      setOffset(prev => ({
+        x: prev.x + Math.round((deltaX * TOUCH_SPEED) / zoom),
+        y: prev.y + Math.round((deltaY * TOUCH_SPEED) / zoom),
+      }));
+
+      setLastTouch({
+        x: currentX,
+        y: currentY,
+        distance: currentDistance,
+      });
+    } else if (event.touches.length === 1) {
+      // Handle single touch pan
+      const deltaX = event.touches[0].clientX - lastTouch.x;
+      const deltaY = event.touches[0].clientY - lastTouch.y;
+
+      setOffset(prev => ({
+        x: prev.x + Math.round((deltaX * TOUCH_SPEED) / zoom),
+        y: prev.y + Math.round((deltaY * TOUCH_SPEED) / zoom),
+      }));
+
+      setLastTouch({
+        x: event.touches[0].clientX,
+        y: event.touches[0].clientY,
+      });
+    }
+  }, [lastTouch, initialPinchDistance, zoom]);
+
+  const handleTouchEnd = useCallback(() => {
+    setIsMoving(false);
+    setLastTouch(null);
+    setInitialPinchDistance(null);
+  }, []);
+
   return (
     <div className="w-full h-full relative bg-[rgba(0,0,0,0.4)]">
-      <header className="fixed inset-x-0 top-4 z-20 px-4">
-        <div className="mx-auto max-w-3xl bg-black/40 backdrop-blur-md rounded-2xl p-3 flex items-center gap-6 border border-white/5">
+      <header className="fixed inset-x-0 bottom-4 h-fit md:top-4 z-20 px-4">
+        <div className="mx-auto max-w-3xl bg-black/40 backdrop-blur-md rounded-2xl p-3 flex justify-between3 items-center gap-6 border border-white/5">
           <div className="text-sm text-white/70">
             <span>x: {coordinatesMouse.x}</span>
             <span className="mx-1">·</span>
             <span>y: {coordinatesMouse.y}</span>
           </div>
 
-          <div className="flex-1 text-center font-light text-white/90">
+          <div className="flex-1 hidden md:block text-center font-light text-white/90">
             Procedural Map
           </div>
 
@@ -309,8 +401,17 @@ const NativeMap = () => {
           onMouseMove={handleMouseMove}
           onMouseDown={handleMouseDown}
           onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
           onWheel={handleWheel}
-          style={{ cursor: isMoving ? "grabbing" : "grab" }}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          style={{ 
+            cursor: isMoving ? "grabbing" : "grab",
+            touchAction: "none",
+            userSelect: "none",
+            WebkitUserSelect: "none"
+          }}
           className="z-20 [image-rendering:crisp-edges] my-auto rounded-lg shadow-[0_2px_10px_-3px_rgba(0,0,0,0.2)]"
         />
       </div>
