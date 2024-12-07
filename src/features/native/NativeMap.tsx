@@ -40,6 +40,14 @@ type TouchInfo = {
   distance?: number;
 };
 
+type WorkerMessage = {
+  type: 'chunkGenerated';
+  payload: {
+    chunk: Tile[][];
+    position: ChunkPosition;
+  };
+};
+
 const isChunkVisible = (chunk: Tile[][], offset: {x: number, y: number}, width: number, height: number, zoom: number) => {
   const chunkX = chunk[0][0].x * TILE_SIZE;
   const chunkY = chunk[0][0].y * TILE_SIZE;
@@ -72,6 +80,16 @@ type NativeMapProps = {
   onReady?: () => void;
 };
 
+const WORKER_COUNT = 4; // Nombre de workers à utiliser en parallèle
+
+const createMapWorkers = () => {
+  return Array.from({ length: WORKER_COUNT }, () => 
+    new Worker(new URL('../../workers/mapWorker.ts', import.meta.url), {
+      type: 'module'
+    })
+  );
+};
+
 const NativeMap = ({ seed, onReady }: NativeMapProps) => {
   const initialValues = getInitialValues();
   const canvasTerrainRef = useRef<HTMLCanvasElement>(null);
@@ -91,17 +109,77 @@ const NativeMap = ({ seed, onReady }: NativeMapProps) => {
   const [lastTouch, setLastTouch] = useState<TouchInfo | null>(null);
   const [initialPinchDistance, setInitialPinchDistance] = useState<number | null>(null);
 
-  const generateChunk = useCallback((chunkPosition?: ChunkPosition) => {
-    const offset = chunkPosition
-      ? {
-          x: chunkPosition.x * CHUNK_SIZE,
-          y: chunkPosition.y * CHUNK_SIZE,
-        }
-      : undefined;
+  const workersRef = useRef<Worker[]>([]);
+  const workersAvailable = useRef<Worker[]>([]);
+  const pendingChunks = useRef<ChunkPosition[]>([]);
 
-    const chunk = generateMapGround(offset, seed);
-    return chunk;
-  }, []);
+  const generateChunk = useCallback((chunkPosition?: ChunkPosition) => {
+    if (!chunkPosition) return [];
+    
+    if (workersRef.current.length === 0) {
+      workersRef.current = createMapWorkers();
+      workersAvailable.current = [...workersRef.current];
+      
+      workersRef.current.forEach(worker => {
+        worker.onmessage = (e: MessageEvent<WorkerMessage>) => {
+          const { type, payload } = e.data;
+          
+          if (type === 'chunkGenerated') {
+            const { chunk, position } = payload;
+            const key = getChunkKey(position.x, position.y);
+            
+            if (initalRender) {
+              setInitalRender(false);
+              onReady?.();
+            }
+            
+            setChunks(prev => {
+              const newChunks = new Map(prev);
+              newChunks.set(key, chunk);
+              return newChunks;
+            });
+            
+            // Remettre le worker dans la liste des disponibles
+            workersAvailable.current.push(worker);
+            
+            // Traiter le prochain chunk en attente s'il y en a
+            if (pendingChunks.current.length > 0) {
+              const nextChunk = pendingChunks.current.shift();
+              if (nextChunk) {
+                const availableWorker = workersAvailable.current.pop();
+                if (availableWorker) {
+                  availableWorker.postMessage({
+                    type: 'generateChunk',
+                    payload: {
+                      chunkPosition: nextChunk,
+                      seed
+                    }
+                  });
+                }
+              }
+            }
+          }
+        };
+      });
+    }
+
+    // Si un worker est disponible, l'utiliser
+    const availableWorker = workersAvailable.current.pop();
+    if (availableWorker) {
+      availableWorker.postMessage({
+        type: 'generateChunk',
+        payload: {
+          chunkPosition,
+          seed
+        }
+      });
+    } else {
+      // Sinon, ajouter le chunk à la file d'attente
+      pendingChunks.current.push(chunkPosition);
+    }
+
+    return [];
+  }, [seed]);
 
   const handleMouseMove = useCallback((event: MouseEvent<HTMLCanvasElement>) => {
     event.preventDefault();
@@ -292,32 +370,32 @@ const NativeMap = ({ seed, onReady }: NativeMapProps) => {
       return !chunks.has(key);
     });
 
-    if (missingChunks.length === 0) return;
+    if (missingChunks.length === 0) {
+      if (initalRender) {
+        setInitalRender(false);
+        onReady?.();
+      }
+      return;
+    }
 
-    const newChunks = new Map(chunks);
     missingChunks.forEach(chunk => {
-      const key = getChunkKey(chunk.x, chunk.y);
-      newChunks.set(key, generateChunk(chunk));
+      generateChunk(chunk);
     });
 
-    if (newChunks.size > CHUNK_CACHE_SIZE) {
+    if (chunks.size > CHUNK_CACHE_SIZE) {
       const visibleKeys = new Set(
         visibleChunks.map(chunk => getChunkKey(chunk.x, chunk.y))
       );
       
-      Array.from(newChunks.keys())
-        .filter(key => !visibleKeys.has(key))
-        .slice(0, newChunks.size - CHUNK_CACHE_SIZE)
-        .forEach(key => newChunks.delete(key));
+      setChunks(prev => {
+        const newChunks = new Map(prev);
+        Array.from(newChunks.keys())
+          .filter(key => !visibleKeys.has(key))
+          .slice(0, newChunks.size - CHUNK_CACHE_SIZE)
+          .forEach(key => newChunks.delete(key));
+        return newChunks;
+      });
     }
-    
-    setChunks(newChunks);
-
-    if (initalRender) {
-      setInitalRender(false);
-      onReady?.();
-    }
-    
   }, [offset.x, offset.y, generateChunk, zoom]);
 
   const handleMouseDown = useCallback((event: MouseEvent<HTMLCanvasElement>) => {
@@ -436,6 +514,17 @@ const NativeMap = ({ seed, onReady }: NativeMapProps) => {
     setIsMoving(false);
     setLastTouch(null);
     setInitialPinchDistance(null);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      workersRef.current.forEach(worker => {
+        worker.terminate();
+      });
+      workersRef.current = [];
+      workersAvailable.current = [];
+      pendingChunks.current = [];
+    };
   }, []);
 
   return (
