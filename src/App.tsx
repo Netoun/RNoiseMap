@@ -3,10 +3,11 @@ import ThreeMap from "./features/three/ThreeMap";
 import NativeMap from "./features/native/NativeMap";
 import { Switch } from "./components/ui/Switch";
 import Legend from "./components/ui/Legend";
-import { RefreshCcwDotIcon } from "lucide-react";
+import { Loader, RefreshCcwDotIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
 function App() {
+  const [isLoading, setIsLoading] = React.useState(true);
   const [isThreeMode, setIsThreeMode] = React.useState(false);
 
   const [seed, setSeed] = React.useState(() => {
@@ -21,11 +22,12 @@ function App() {
   }, [seed]);
 
   const handleRefresh = () => {
+    setIsLoading(true);
     setSeed(Math.random().toString(36).substring(7));
   };
 
   return (
-    <div className="w-full h-screen relative">
+    <div className="w-full h-screen relative overflow-hidden">
       <div className="h-12 fixed top-4 left-4 gap-4 z-50 flex justify-between">
         <button
           onClick={handleRefresh}
@@ -42,31 +44,31 @@ function App() {
         </div>
       </div>
       <AnimatePresence mode="wait">
-        <motion.div 
+        <motion.div
           key={seed}
-          initial={{ 
+          initial={{
             opacity: 0,
             scale: 1.2,
             filter: "brightness(2) sepia(1) blur(20px)",
-            rotateX: 15
+            rotateX: 15,
           }}
-          animate={{ 
+          animate={{
             opacity: 1,
             scale: 1,
             filter: "brightness(1) sepia(0) blur(0px)",
-            rotateX: 0
+            rotateX: 0,
           }}
-          exit={{ 
-            opacity: 0
+          exit={{
+            opacity: 0,
           }}
-          transition={{ 
+          transition={{
             duration: 0.8,
-            ease: [0.22, 1, 0.36, 1]
+            ease: [0.22, 1, 0.36, 1],
           }}
           style={{
             width: "100%",
             height: "100%",
-            perspective: "1000px"
+            perspective: "1000px",
           }}
         >
           <motion.div
@@ -77,11 +79,19 @@ function App() {
             {isThreeMode ? (
               <ThreeMap seed={seed} />
             ) : (
-              <NativeMap seed={seed} />
+              <NativeMap
+                seed={seed}
+                onReady={() => setIsLoading(false)}
+              />
             )}
           </motion.div>
         </motion.div>
       </AnimatePresence>
+      {isLoading && (
+        <div className="absolute inset-0 z-[9999] flex items-center justify-center text-white/70 backdrop-blur-sm">
+          <Loader className="w-12 h-12 animate-spin" />
+        </div>
+      )}
       <Legend />
     </div>
   );

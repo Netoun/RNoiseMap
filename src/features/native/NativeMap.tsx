@@ -69,12 +69,14 @@ const getInitialValues = () => {
 
 type NativeMapProps = { 
   seed: string;
+  onReady?: () => void;
 };
 
-const NativeMap = ({ seed }: NativeMapProps) => {
+const NativeMap = ({ seed, onReady }: NativeMapProps) => {
   const initialValues = getInitialValues();
   const canvasTerrainRef = useRef<HTMLCanvasElement>(null);
 
+  const [initalRender, setInitalRender] = useState(true);
   const [chunks, setChunks] = useState<Map<string, Tile[][]>>(new Map());
 
   const [context, setContext] = useState<CanvasRenderingContext2D | null>(null);
@@ -97,7 +99,8 @@ const NativeMap = ({ seed }: NativeMapProps) => {
         }
       : undefined;
 
-    return generateMapGround(offset, seed);
+    const chunk = generateMapGround(offset, seed);
+    return chunk;
   }, []);
 
   const handleMouseMove = useCallback((event: MouseEvent<HTMLCanvasElement>) => {
@@ -307,8 +310,14 @@ const NativeMap = ({ seed }: NativeMapProps) => {
         .slice(0, newChunks.size - CHUNK_CACHE_SIZE)
         .forEach(key => newChunks.delete(key));
     }
-
+    
     setChunks(newChunks);
+
+    if (initalRender) {
+      setInitalRender(false);
+      onReady?.();
+    }
+    
   }, [offset.x, offset.y, generateChunk, zoom]);
 
   const handleMouseDown = useCallback((event: MouseEvent<HTMLCanvasElement>) => {
