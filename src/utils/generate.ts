@@ -384,3 +384,45 @@ export const getBiomeByCoords = (x: number, y: number): Biome => {
 
   return getBiome(height, moisture, heat, x, y);
 };
+
+export const createTileGroupMatrix = (chunk: Tile[][], tileScale: number): Tile[][] => {
+  const matrixSize = Math.ceil(CHUNK_SIZE / tileScale);
+  const matrix: Tile[][] = Array(matrixSize).fill(null).map(() => Array(matrixSize).fill(null));
+  
+  for (let y = 0; y < matrixSize; y++) {
+    for (let x = 0; x < matrixSize; x++) {
+      const baseX = x * tileScale;
+      const baseY = y * tileScale;
+      
+      // Calculer les valeurs moyennes pour le groupe
+      let totalHeight = 0;
+      let totalMoisture = 0;
+      let totalHeat = 0;
+      let count = 0;
+      
+      for (let dy = 0; dy < tileScale && baseY + dy < CHUNK_SIZE; dy++) {
+        for (let dx = 0; dx < tileScale && baseX + dx < CHUNK_SIZE; dx++) {
+          const tile = chunk[baseY + dy][baseX + dx];
+          totalHeight += tile.values[0];
+          totalMoisture += tile.values[1];
+          totalHeat += tile.values[2];
+          count++;
+        }
+      }
+      
+      const avgHeight = totalHeight / count;
+      const avgMoisture = totalMoisture / count;
+      const avgHeat = totalHeat / count;
+      
+      // Créer une tuile regroupée
+      matrix[y][x] = {
+        ...chunk[baseY][baseX],
+        values: [avgHeight, avgMoisture, avgHeat],
+        w: TILE_SIZE * tileScale,
+        h: TILE_SIZE * tileScale
+      };
+    }
+  }
+  
+  return matrix;
+};

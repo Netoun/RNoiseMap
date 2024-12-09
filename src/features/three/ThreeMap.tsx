@@ -14,7 +14,7 @@ import {
 import { useSearchParams } from "react-router";
 import { useDebounce } from "../../hooks/useDebounce";
 
-const VIEWPORT_PADDING = 2;
+const VIEWPORT_PADDING = 4;
 const CHUNK_CACHE_SIZE = 100;
 
 type ChunkCache = Map<string, Tile[][]>;
@@ -95,6 +95,7 @@ type MapContentProps = {
 const MapContent = ({ seed }: MapContentProps) => {
   const [_, setSearchParams] = useSearchParams();
   const [chunks, setChunks] = useState<ChunkCache>(new Map());
+  const [pendingChunks, setPendingChunks] = useState<Set<string>>(new Set());
   const [offset, setOffset] = useState(initInitialOffset());
   const { camera, viewport } = useThree();
 
@@ -135,12 +136,34 @@ const MapContent = ({ seed }: MapContentProps) => {
     });
 
     const newChunks = new Map(chunks);
+    const newPendingChunks = new Set<string>();
+
     visibleChunks.forEach(chunk => {
       const key = getChunkKey(chunk.x, chunk.y);
-      if (!newChunks.has(key)) {
-        newChunks.set(key, generateChunk(chunk));
+      if (!newChunks.has(key) && !pendingChunks.has(key)) {
+        newPendingChunks.add(key);
       }
     });
+
+    if (newPendingChunks.size > 0) {
+      setPendingChunks(new Set([...pendingChunks, ...newPendingChunks]));
+      
+      Array.from(newPendingChunks).forEach((key, index) => {
+        setTimeout(() => {
+          const [x, y] = key.split(',').map(Number);
+          setChunks(prev => {
+            const updated = new Map(prev);
+            updated.set(key, generateChunk({ x, y }));
+            return updated;
+          });
+          setPendingChunks(prev => {
+            const updated = new Set(prev);
+            updated.delete(key);
+            return updated;
+          });
+        }, index * 50);
+      });
+    }
 
     if (newChunks.size > CHUNK_CACHE_SIZE) {
       const visibleKeys = new Set(
@@ -153,7 +176,6 @@ const MapContent = ({ seed }: MapContentProps) => {
         .forEach(key => newChunks.delete(key));
     }
 
-    setChunks(newChunks);
   }, [offset, viewport, generateChunk]);
 
   useFrame(() => {
