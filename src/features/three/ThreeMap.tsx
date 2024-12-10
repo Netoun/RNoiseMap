@@ -10,6 +10,7 @@ import {
   generateMapGround,
   getColor,
   CHUNK_SIZE,
+  DEFAULT_GENERATION_PARAMS,
 } from "../../utils/generate";
 import { useSearchParams } from "react-router";
 import { useDebounce } from "../../hooks/useDebounce";
@@ -89,10 +90,10 @@ const initInitialOffset = () => {
 
 type MapContentProps = {
   seed: string;
+  generationParams: typeof DEFAULT_GENERATION_PARAMS;
 };
 
-
-const MapContent = ({ seed }: MapContentProps) => {
+const MapContent = ({ seed, generationParams }: MapContentProps) => {
   const [_, setSearchParams] = useSearchParams();
   const [chunks, setChunks] = useState<ChunkCache>(new Map());
   const [pendingChunks, setPendingChunks] = useState<Set<string>>(new Set());
@@ -107,7 +108,7 @@ const MapContent = ({ seed }: MapContentProps) => {
         }
       : undefined;
 
-    return generateMapGround(offset, seed);
+    return generateMapGround(offset, seed, generationParams);
   }, []);
 
   const updateSearchParams = (x: number, y: number) => {
@@ -199,11 +200,17 @@ const MapContent = ({ seed }: MapContentProps) => {
 
 type ThreeMapProps = {
   seed: string;
+  generationParams: typeof DEFAULT_GENERATION_PARAMS;
 };
 
-const ThreeMap = ({ seed }: ThreeMapProps) => {
+const ThreeMap = ({ seed, generationParams }: ThreeMapProps) => {
   return (
     <div className="h-screen w-screen relative bg-[rgba(0,0,0,0.4)]">
+      <div className="fixed inset-0 top-4 z-[9999] px-4 flex items-center justify-center">
+        <div className="w-fit text-center text-8xl text-center font-light text-white/90 bg-black/70 backdrop-blur-md rounded-2xl p-3 border border-white/5">
+            WIP : 3D Map
+        </div>
+      </div>
       <header className="fixed inset-x-0 top-4 z-20 px-4">
         <div className="mx-auto max-w-3xl bg-black/70 backdrop-blur-md rounded-2xl p-3 flex items-center gap-6 border border-white/5">
           <div className="flex-1 text-center font-light text-white/90">
@@ -222,7 +229,7 @@ const ThreeMap = ({ seed }: ThreeMapProps) => {
         }}
         className="w-full h-full"
       >
-        <MapContent seed={seed} />
+        <MapContent seed={seed} generationParams={generationParams} />
         <OrbitControls 
           enableRotate={false}
           enableZoom={true}

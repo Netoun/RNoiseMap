@@ -3,7 +3,7 @@
  * Utilise un système de seed pour générer du terrain procédural cohérent
  */
 
-import { generateMapGround, ChunkPosition, initializeNoise, CHUNK_SIZE } from '../utils/generate';
+import { generateMapGround, ChunkPosition, initializeNoise, CHUNK_SIZE, DEFAULT_GENERATION_PARAMS } from '../utils/generate';
 
 // Garde en mémoire la dernière seed utilisée pour éviter de réinitialiser inutilement
 let currentSeed: string | null = null;
@@ -17,13 +17,14 @@ self.onmessage = (e: MessageEvent<{
   type: 'generateChunk', 
   payload: { 
     chunkPosition: ChunkPosition, 
-    seed: string 
+    seed: string,
+    generationParams: typeof DEFAULT_GENERATION_PARAMS
   } 
 }>) => {
   const { type, payload } = e.data;
   
   if (type === 'generateChunk') {
-    const { chunkPosition, seed } = payload;
+    const { chunkPosition, seed, generationParams } = payload;
     
     // Réinitialise le générateur de bruit si la seed change
     if (seed !== currentSeed) {
@@ -37,8 +38,7 @@ self.onmessage = (e: MessageEvent<{
       y: chunkPosition.y * CHUNK_SIZE  // CHUNK_SIZE
     };
 
-    // Génère le terrain pour ce chunk
-    const chunk = generateMapGround(offset, seed);
+    const chunk = generateMapGround(offset, seed, generationParams);
     
     // Renvoie le chunk généré
     self.postMessage({

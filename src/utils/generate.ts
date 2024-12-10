@@ -10,6 +10,18 @@ let noise2DRivers: NoiseFunction2D;
 const biomeCache = new Map<string, Biome>();
 const colorCache = new Map<string, string>();
 
+
+
+export const DEFAULT_GENERATION_PARAMS = {
+  octaves: 8,
+  persistence: 0.5,
+  scale: 0.005,
+  amplitude: 1,
+  frequency: 1,
+} 
+
+
+
 export function initializeNoise(seed: string) {
   const seedHeight = alea(seed + "_height");
   const seedMoisture = alea(seed + "_moisture");
@@ -216,6 +228,47 @@ export function calculateMissingChunks(
   });
 }
 
+/**
+ * Fractal Brownian Motion (fBm) - Creates natural-looking noise by combining multiple octaves
+ * @param noise - The base noise function to use
+ * @param x - X coordinate
+ * @param y - Y coordinate
+ * @param octaves - Number of noise layers to combine
+ * @param persistence - How much each octave's amplitude decreases
+ * @param scale - Base scale of the noise
+ * @param amplitude - Initial amplitude
+ * @param frequency - Initial frequency
+ * @param total - Accumulator for the noise value
+ * @returns Combined noise value between -1 and 1
+ */
+export function fBm(
+  noise: NoiseFunction2D,
+  x: number,
+  y: number,
+  octaves = DEFAULT_GENERATION_PARAMS.octaves,
+  persistence = DEFAULT_GENERATION_PARAMS.persistence,
+  scale = DEFAULT_GENERATION_PARAMS.scale,
+  amplitude = DEFAULT_GENERATION_PARAMS.amplitude,
+  frequency = DEFAULT_GENERATION_PARAMS.frequency,
+  total = 0
+): number {
+  for (let i = 0; i < octaves; i++) {
+    total += noise(x * frequency * scale, y * frequency * scale) * amplitude;
+    amplitude *= persistence;  // Reduce amplitude for each octave
+    frequency *= 2;           // Double frequency for each octave
+  }
+  return total;
+}
+
+/**
+ * Determines the biome type based on height, moisture, and heat values
+ * @param height - Terrain elevation (-1 to 1)
+ * @param moisture - Moisture level (-1 to 1)
+ * @param heat - Temperature (-1 to 1)
+ * @param x - X coordinate for river checking
+ * @param y - Y coordinate for river checking
+ * @returns The determined biome type
+ */
 export function getBiome(
   height: number,
   moisture: number,
@@ -223,13 +276,16 @@ export function getBiome(
   x: number,
   y: number
 ): Biome {
+  // Create cache key for performance
   const cacheKey = `${height.toFixed(3)}_${moisture.toFixed(3)}_${heat.toFixed(3)}_${x}_${y}`;
   
+  // Check cache first
   const cached = biomeCache.get(cacheKey);
   if (cached) return cached;
 
   let result: Biome;
 
+  // Determine biome based on height first
   if (height < -0.5) {
     result = "deep_ocean";
   } else if (height < -0.1) {
@@ -239,14 +295,18 @@ export function getBiome(
   } else if (isLake(height, moisture)) {
     result = "lake";
   } else {
+    // Default to grassland
     result = "grassland";
     
+    // Check against all biome presets
     for (const [biomeKey, biomePreset] of Object.entries(BiomePreset)) {
+      // Skip water biomes as they're handled above
       if (["deep_ocean", "shallow_ocean", "river", "lake"].includes(biomeKey)) continue;
 
       const heightValid = height >= biomePreset.minHeight && 
         (!biomePreset.maxHeight || height <= biomePreset.maxHeight);
       
+      // Check if current position matches biome requirements
       if (
         heightValid &&
         moisture >= biomePreset.minMoisture &&
@@ -258,6 +318,7 @@ export function getBiome(
     }
   }
 
+  // Cache and return result
   biomeCache.set(cacheKey, result);
   return result;
 }
@@ -270,17 +331,28 @@ type BiomeTransition = {
 
 const TRANSITION_DISTANCE = 0.2;
 
+/**
+ * Generates a color for a tile, including biome transitions
+ * @param biome - The tile's biome
+ * @param value - The tile's height value
+ * @param neighbors - Adjacent tiles for blending colors
+ * @returns HSL color string
+ */
 export const getColor = (biome: Biome, value: number, neighbors?: Tile[]) => {
+  // If no neighbors, return base color
   if (!neighbors) {
     const baseColor = colors[biome];
     return `hsl(${baseColor.h}, ${baseColor.s}%, ${baseColor.l}%)`;
   }
 
+  // Check cache
   const cacheKey = `${biome}_${value}_${neighbors.map(n => n?.biome).join('_')}`;
   const cached = colorCache.get(cacheKey);
   if (cached) return cached;
 
   const baseColor = colors[biome];
+  
+  // Calculate transitions to different biomes
   const transitions: BiomeTransition[] = neighbors
     .filter(n => n && n.biome !== biome)
     .map(n => ({
@@ -289,16 +361,19 @@ export const getColor = (biome: Biome, value: number, neighbors?: Tile[]) => {
       blend: Math.max(0, TRANSITION_DISTANCE - Math.abs(value - n.values[0]))
     }));
 
+  // If no transitions, return base color
   if (transitions.length === 0) {
     const result = `hsl(${baseColor.h}, ${baseColor.s}%, ${baseColor.l}%)`;
     colorCache.set(cacheKey, result);
     return result;
   }
 
+  // Find strongest transition
   const strongestTransition = transitions.reduce((prev, curr) => 
     prev.blend > curr.blend ? prev : curr
   );
 
+  // Blend colors based on transition strength
   const toColor = colors[strongestTransition.to];
   const blendFactor = strongestTransition.blend / TRANSITION_DISTANCE;
 
@@ -311,26 +386,6 @@ export const getColor = (biome: Biome, value: number, neighbors?: Tile[]) => {
   return result;
 };
 
-export function fBm(
-  noise: NoiseFunction2D,
-  x: number,
-  y: number,
-  octaves: number,
-  persistence: number,
-  scale = 0.01,
-  amplitude = 0.8,
-  frequency = 1,
-  total = 0
-): number {
-  for (let i = 0; i < octaves; i++) {
-    total += noise(x * frequency * scale, y * frequency * scale) * amplitude;
-    amplitude *= persistence;
-    frequency *= 2;
-  }
-
-  return total;
-}
-
 function isRiver(x: number, y: number, riverNoise: number): boolean {
   const riverValue = fBm(noise2DRivers, x, y, 4, 0.5, 0.005, 1);
   return Math.abs(riverValue) < 0.05 && riverNoise > 0.3;
@@ -340,25 +395,38 @@ function isLake(height: number, moisture: number): boolean {
   return height < 0.1 && height > -0.1 && moisture > 0.6;
 }
 
+/**
+ * Generates a chunk of the map
+ * @param offset - Position offset for the chunk
+ * @param seed - Seed for noise generation
+ * @returns 2D array of tiles
+ */
 export const generateMapGround = (
   offset: Offset = { x: 0, y: 0 },
-  seed: string
+  seed: string,
+  generationParams?: typeof DEFAULT_GENERATION_PARAMS
 ): Tile[][] => {
+  // Initialize noise if seed provided
   if (seed) {
     initializeNoise(seed);
   }
   
   const chunk: Tile[][] = [];
+  // Generate tiles for the chunk
   for (let x = 0; x < CHUNK_SIZE; x++) {
     const row: Tile[] = [];
     for (let y = 0; y < CHUNK_SIZE; y++) {
       const _x = x - offset.x;
       const _y = y - offset.y;
-      
-      const height = fBm(noise2DHeight, _x, _y, 8, 0.5, 0.005, 1);
-      const moisture = fBm(noise2DMoisture, _x, _y, 4, 0.5, 0.008, 0.7);
-      const heat = fBm(noise2DHeat, _x, _y, 6, 0.5, 0.006, 0.8);
 
+      const { octaves, persistence, scale, amplitude, frequency } = generationParams || DEFAULT_GENERATION_PARAMS;
+      
+      // Generate terrain features using fBm noise  
+      const height = fBm(noise2DHeight, _x, _y, octaves, persistence, scale, amplitude, frequency);
+      const moisture = fBm(noise2DMoisture, _x, _y, octaves, persistence, scale, amplitude, frequency);
+      const heat = fBm(noise2DHeat, _x, _y, octaves, persistence, scale, amplitude, frequency);
+
+      // Create tile with calculated values
       const biome = getBiome(height, moisture, heat, _x, _y);
       row.push({
         x: _x,

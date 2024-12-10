@@ -1,14 +1,18 @@
 import * as React from "react";
 import ThreeMap from "./features/three/ThreeMap";
-import NativeMap from "./features/native/NativeMap";
+import NativeMap from "./features/native/native-map";
 import { Switch } from "./components/ui/Switch";
 import Legend from "./components/ui/Legend";
 import { Loader, RefreshCcwDotIcon } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
+import Settings from "./components/ui/Settings";
+import { DEFAULT_GENERATION_PARAMS } from "./utils/generate";
 
 function App() {
   const [isLoading, setIsLoading] = React.useState(true);
   const [isThreeMode, setIsThreeMode] = React.useState(false);
+
+  const [generationParams, setGenerationParams] = React.useState(DEFAULT_GENERATION_PARAMS);
 
   const [seed, setSeed] = React.useState(() => {
     const params = new URLSearchParams(window.location.search);
@@ -19,21 +23,26 @@ function App() {
     const newUrl = new URL(window.location.href);
     newUrl.searchParams.set("seed", seed);
     window.history.pushState({}, "", newUrl);
-  }, [seed]);
+  }, [seed]);  
 
-  const handleRefresh = () => {
+  const handleSeedChange = () => {
     setIsLoading(true);
     setSeed(Math.random().toString(36).substring(7));
   };
 
-  return (
+  const handleParamsChange = (params: typeof DEFAULT_GENERATION_PARAMS) => {
+    setIsLoading(true);
+    setGenerationParams(params);
+  };
+
+return (
     <div className="w-full h-screen relative overflow-hidden">
       <div className="h-12 fixed top-4 left-4 gap-4 z-50 flex justify-between">
         <button
-          onClick={handleRefresh}
+          onClick={handleSeedChange}
           className="cursor w-full flex items-center justify-center sm:w-auto px-4 py-3 bg-black/70 backdrop-blur-md text-white/70 rounded-2xl transition-colors text-sm"
         >
-          Refresh Seed <RefreshCcwDotIcon className="w-4 h-4 ml-2" />
+          New seed <RefreshCcwDotIcon className="w-4 h-4 ml-2" />
         </button>
       </div>
       <div className="h-12 fixed top-4 right-4 gap-4 z-50 flex justify-between">
@@ -45,7 +54,7 @@ function App() {
       </div>
       <AnimatePresence mode="wait">
         <motion.div
-          key={seed}
+          key={seed + JSON.stringify(generationParams)}
           initial={{
             opacity: 0,
             scale: 1.2,
@@ -72,15 +81,16 @@ function App() {
           }}
         >
           <motion.div
-            initial={{ rotateX: 10 }}
+          initial={{ rotateX: 10 }}
             animate={{ rotateX: 0 }}
             transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
           >
             {isThreeMode ? (
-              <ThreeMap seed={seed} />
+              <ThreeMap seed={seed} generationParams={generationParams} />
             ) : (
               <NativeMap
                 seed={seed}
+                generationParams={generationParams}
                 onReady={() => setIsLoading(false)}
               />
             )}
@@ -93,6 +103,7 @@ function App() {
         </div>
       )}
       <Legend />
+      <Settings onParamsChange={handleParamsChange} />
     </div>
   );
 }

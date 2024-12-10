@@ -12,12 +12,14 @@
   "dependencies": {
     "@fontsource/changa": "^5.1.0",
     "@fontsource/geist-mono": "^5.1.0",
+    "@radix-ui/react-slider": "^1.2.1",
     "@radix-ui/react-switch": "^1.1.1",
     "@react-three/drei": "^9.120.0",
     "@react-three/fiber": "^9.0.0-rc.1",
     "@tailwindcss/vite": "^4.0.0-beta.5",
     "@types/three": "^0.170.0",
     "alea": "^1.0.1",
+    "clsx": "^2.1.1",
     "framer-motion": "^11.13.1",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0-experimental-0066e04a6",
@@ -25,6 +27,7 @@
     "react-router": "^7.0.2",
     "react-touch-events": "^3.0.0",
     "simplex-noise": "^4.0.3",
+    "tailwind-merge": "^2.5.5",
     "three": "^0.171.0"
   },
   "devDependencies": {
